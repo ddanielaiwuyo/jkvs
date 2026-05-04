@@ -30,28 +30,8 @@ public class KVStore {
 	}
 
 	public String set(String key, String value) throws IOException {
-		// RandomAccessFile wal_file = new RandomAccessFile(WAL_FILE.toString(), "rw");
-		//
-		// // Start at the end of the file to append the new log
-		// wal_file.seek(wal_file.length());
-		//
-		// // <set> <key> <value> $\r\n
-		// byte[] content = std.encoder(SET_COMMAND, key, value);
-		// wal_file.write(content);
-		//
-		// long log_pointer = wal_file.getFilePointer();
-		// wal_file.close();
 		long log_pointer = kvlib.append_to_log(WAL_FILE, SET_COMMAND, key, value);
 		kvlib.append_to_index(INDEX_FILE, key, log_pointer);
-
-		// Append to the index file <key> <log-pointer>
-		// RandomAccessFile index_file = new RandomAccessFile(INDEX_FILE.toString(),
-		// "rw");
-		// index_file.seek(index_file.length());
-		//
-		// content = String.format("%s %s\n", key, log_pointer).getBytes();
-		// index_file.write(content);
-		// index_file.close();
 
 		std.println("written to index file");
 		return values.put(key, value);
@@ -63,9 +43,6 @@ public class KVStore {
 	}
 
 	public String remove(String key) throws IOException {
-		// Step 1. Rebuild index file to check if the key exists
-		// Step 2. Append to wal file to record the command -> log_pointer
-		// Step 3. Append to index file to record key and offset
 		try {
 			HashMap<String, Long> index = kvlib.rebuild_index(INDEX_FILE, " ");
 			std.println("  rebuilt index -> ");
