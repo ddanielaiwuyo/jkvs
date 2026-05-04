@@ -3,7 +3,6 @@ package jkvs;
 import jkvs.lib.*;
 
 class Main {
-
 	static Std std = new Std();
 	static String USAGE = "   Usage:: jkvs <command> <key> <value>";
 	static String VERSION = "0.0.0";
