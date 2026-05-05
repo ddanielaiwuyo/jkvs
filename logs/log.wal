@@ -7,3 +7,8 @@ rm username "" $
 set username "fetty-wap" $
 rm username "" $
 rm username "" $
+rm username "" $
+set username "testrm" $
+set username "wanda" $
+rm username "" $
+set username "kotlin_framework" $
