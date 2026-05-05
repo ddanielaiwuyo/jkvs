@@ -14,6 +14,7 @@ public class JKVStore {
 	private final Path INDEX_FILE = LOG_DIR.resolve("index.txt");
 	private final String INDEX_FILE_DELIM = " ";
 	private final Path WAL_FILE = LOG_DIR.resolve("log.wal");
+	private final int MAX_LOG_FILE_SIZE_MB = 1 * 1024 * 1024;
 
 	/// Usage: jkvs GET <KEY>
 	public static final String GET_COMMAND = "get";
@@ -54,8 +55,13 @@ public class JKVStore {
 	private void resumeStore() throws IOException {
 		try {
 			std.println("Resuming jkvs store...");
+			// Step 1. Check logSize
+			// Step 2. If logSize > MAX_FILE_LOG_SIZE_MB then compactLogs
+			// Step 3. Else, rebuildIndex
 			memoryIndex = kvlib.rebuild_index(INDEX_FILE, INDEX_FILE_DELIM);
 			std.println("Rebuilding index logs...\n\n");
+
+
 		} catch (Exception err) {
 			std.eprintln("KVStore::resumeStore:: Unexpected error occured");
 			throw new RuntimeException(err);
@@ -82,11 +88,11 @@ public class JKVStore {
 			return null;
 		}
 
-		long logPointer = memoryIndex.get(key);
+		long log_pointer = memoryIndex.get(key);
 		// Open the .wal file to read it
 		try (
 				RandomAccessFile raf = new RandomAccessFile(WAL_FILE.toString(), "r")) {
-			raf.seek(logPointer);
+			raf.seek(log_pointer);
 
 			String record = raf.readLine();
 
@@ -95,18 +101,18 @@ public class JKVStore {
 				return null;
 			}
 
-			String[] parsedLog = record.replaceAll("$\r\n", "").split(" ");
+			String[] parsed_log = record.replaceAll("$\r\n", "").split(" ");
 
-			if (parsedLog.length < 4) {
-				std.eprintf("log record parsed to array has unexpected format: %d\n ", parsedLog.length);
+			if (parsed_log.length < 4) {
+				std.eprintf("log record parsed to array has unexpected format: %d\n ", parsed_log.length);
 				std.eprintf("Log: %s\n", record);
-				for (String value : parsedLog) {
+				for (String value : parsed_log) {
 					std.eprintf(" %s\n", value);
 				}
 				throw new RuntimeException("KVStore::get::Unexpected log format");
 			}
 
-			String value = String.join(" ", Arrays.copyOfRange(parsedLog, 2, parsedLog.length - 1));
+			String value = String.join(" ", Arrays.copyOfRange(parsed_log, 2, parsed_log.length - 1));
 
 			return value.replaceAll("\"", "");
 
