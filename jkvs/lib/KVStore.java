@@ -91,29 +91,6 @@ public class KVStore {
 
 			long log_pointer = kvlib.append_to_log(WAL_FILE, REMOVE_COMMAND, key, "");
 			kvlib.append_to_index(INDEX_FILE, key, log_pointer);
-			// how do we actually want to remove an entry from the log file?
-			// because if we manually delete a value from the log file on every rm
-			// command, we have to always re-write whole data to io, which is slow?
-			// Or when someones does a get, do we just check if a 'rm' command exists for
-			// that key?
-			// set userrname persona
-			// set langugae java
-			// set language rust
-			// rm language
-			//
-			// get language
-			// -> buffer the whole file, and search each line,
-			// -> if rm && language exists, return null
-			//
-			// -> but what if set language was done again, then we'd just have to read the
-			// whole file
-			// -> so we can internally have a code of 1 as deleted, and 0 as exists, im not
-			// sure
-			//
-			// So we can read the file backwards, to avoid that, if we see a rm <key> first,
-			// we return null
-			// otherwise we just return the value, but since we already have an index, 
-			// we just build it, and check the last entry for that key
 
 		} catch (Exception err) {
 			throw new RuntimeException(err);
