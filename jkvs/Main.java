@@ -59,6 +59,7 @@ class Main {
 		} catch (Exception err) {
 			std.eprintln(err);
 			err.printStackTrace();
+			System.exit(1);
 		}
 	}
 

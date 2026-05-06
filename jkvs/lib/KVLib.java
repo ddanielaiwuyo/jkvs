@@ -93,30 +93,38 @@ public class KVLib {
 		try (
 				SimpleReversedReader srr = new SimpleReversedReader(src.toString());) {
 
-			std.debug("constructed srr ");
+			int diff = 0;
 			while ((log = srr.readLine()) != null) {
 				if (log.isEmpty() || log.isBlank()) {
-					std.debug("empty log");
 					continue;
 				}
 
 				String[] parsed_log = log.split(" ");
 				if (parsed_log.length < MIN_LENGTH_OF_PARSED_LOG) {
+					std.eprintf("BAD_LOG:: %s\n", log);
 					throw new RuntimeException(String.format(
-							"JKVSLib::compact_log:: Length of parsed log is less than the MIN %d\n, ",
-							"%s\n %s\n %s\n %s\n",
-							" Possible Reason",
-							"1. Logs may have been corrupted",
-							"2. Codec may have changed",
-							"3. Distributed systems behaving like distributed systems (we don't know the reason)"));
+							"JKVSLib::compact_log:: Length of parsed log is less than the MIN %d\n\n" +
+									"Possible Reason:\n" +
+									"1. Logs may have been corrupted\n" +
+									"2. Codec may have changed\n" +
+									"3. Distributed systems behaving like distributed systems (we don't know the reason)",
+							MIN_LENGTH_OF_PARSED_LOG));
 				}
 
 				String key = parsed_log[1];
+				if (compacted_logs.containsKey(key)) {
+					diff += 1;
+					std.debug("already staged:" + key);
+				}
 				compacted_logs.putIfAbsent(key, log);
 			}
 
-			std.debug("done compacting");
-			std.debug(compacted_logs);
+			if (diff == 0) {
+				std.printf("it appears that there have been no changes -> diff %d\nNo log compaction\n", diff);
+				return;
+			}
+
+			std.printf("total_diff - %d\n", diff);
 
 			// Write each entry to the dest file, and create new index
 			// So on renaming, we should a folder called, past_logs/
@@ -142,20 +150,25 @@ public class KVLib {
 			// collissions could be possble
 
 			if (Files.exists(parent_path)) {
-				std.printf("JKVS::compact_logs:: [WARN] %s already exists!\n", parent_path);
+				std.printf("JKVS::compact_logs:: [WARN] %s already exists! Deleting it\n", parent_path);
+				// Files.deleteIfExists(parent_path);
+				std.deleteRecursively(parent_path);
+				// parent_path = Path.of(String.format("%s_duplicate_copy",
+				// parent_path.toString()));
 				Files.createDirectory(parent_path);
-				std.println("creating past_logs_dir to store original logs...");
+			} else {
+				Files.createDirectory(parent_path);
+				std.debug("created parent_path_fo_src_logs: " + parent_path.toString());
 			}
-
-			Files.createDirectory(parent_path);
 
 			// 1. Move the wal file first
 			Path src_move_destination = parent_path.resolve(src.getFileName());
 			Files.createFile(src_move_destination);
-			std.debug("creating -> " + src_move_destination.toString());
 
 			src_move_destination = Files.move(src, src_move_destination, StandardCopyOption.ATOMIC_MOVE,
 					StandardCopyOption.REPLACE_EXISTING);
+			std.debug("moved src" + src_move_destination.toString());
+			assert Files.exists(src_move_destination);
 
 			// 2. Move its index there
 			Path index_move_destination = parent_path.resolve(src_index_file.getFileName());
@@ -166,25 +179,37 @@ public class KVLib {
 
 			// 3. We can begin writing to the src
 			RandomAccessFile raf = new RandomAccessFile(src.toString(), "rw");
+			std.debug("truncating src file");
+			raf.setLength(0);
 			long log_pointer = raf.length();
 			std.printf("size of log pointer after compaction %d\n", log_pointer);
 
 			// 4. Create the new index file
 			Files.createFile(src_index_file);
+			// truncate the index file
+			Files.write(src_index_file, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
 
 			for (String key : compacted_logs.keySet()) {
+				std.printf("  [][]key: '%s'\n", key);
 				String cmd = compacted_logs.get(key);
-				// Later on might want to refactor to avoid closoing and opening it on every
-				// write
-				raf.write(cmd.getBytes());
-				log_pointer = raf.length();
-				append_to_index(src_index_file, key, log_pointer);
+				String new_log = cmd + "\r\n";
+				long offset = raf.getFilePointer(); // capture BEFORE write
+				raf.write(new_log.getBytes());
+				append_to_index(src_index_file, key, offset); // store start, not end
+				// String cmd = compacted_logs.get(key);
+				// // Later on might want to refactor to avoid closoing and opening it on every
+				// // write
+				// String new_log = cmd + "\r\n";
+				// raf.write(new_log.getBytes());
+				// log_pointer = raf.length();
+				// append_to_index(src_index_file, key, log_pointer);
 			}
+
+			raf.close();
 
 		} catch (Exception err) {
 			std.eprintln("JKVSLib::log_compaction:: Unexpected error");
 			throw new RuntimeException(err);
 		}
 	}
-
 }

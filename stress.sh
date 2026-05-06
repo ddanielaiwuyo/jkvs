@@ -1,7 +1,12 @@
  #!/bin/env bash
-
- LIMIT=100000
- for i in $(seq 1 $LIMIT)
+ set -e
+ LIMIT=1000
+ for ((i=LIMIT; i>0; i--))
  do
-	 ./app set $i $i*2
+	 # if (( $i % 3 ==  0 )); then
+	 #  ./app rm key_$i 
+	 #  ./app set key_$i value_$i 
+	 #  break
+	 # fi
+	 ./app set key_$i value_$i
  done

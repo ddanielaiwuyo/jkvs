@@ -16,7 +16,6 @@ public class JKVStore {
 	private final String INDEX_FILE_DELIM = " ";
 	private final int MAX_LOG_FILE_SIZE_MB = 1 * 1024 * 1024;
 
-	private final int LOG_FILE_LIMIT_MB = 1 * 1024;
 
 	/// Usage: jkvs GET <KEY>
 	public static final String GET_COMMAND = "get";
@@ -63,8 +62,9 @@ public class JKVStore {
 			long file_size = WAL_FILE.toFile().length();
 			if (file_size >= MAX_LOG_FILE_SIZE_MB) {
 				Path dest = Path.of("new_log.wal");
-				std.println("compacting logs");
+				std.printf("COMPACTION TRIGGERED file_size:: %d\n\n", WAL_FILE.toFile().length());
 				kvlib.log_compaction(WAL_FILE, INDEX_FILE, dest);
+				std.printf("\n\nCOMPACTION DONE, file_size:: %d\n\n", WAL_FILE.toFile().length());
 			}
 
 			memoryIndex = kvlib.rebuild_index(INDEX_FILE, INDEX_FILE_DELIM);
@@ -78,6 +78,9 @@ public class JKVStore {
 	}
 
 	public String set(String key, String value) throws IOException {
+		// if (memoryIndex.containsKey(key)) {
+		// return value;
+		// }
 		try {
 			long log_pointer = kvlib.append_to_log(WAL_FILE, SET_COMMAND, key, value);
 			kvlib.append_to_index(INDEX_FILE, key, log_pointer);
