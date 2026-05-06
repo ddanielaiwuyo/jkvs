@@ -1,6 +1,6 @@
  #!/bin/env bash
  set -e
- LIMIT=1000
+ LIMIT=2000
  for ((i=LIMIT; i>0; i--))
  do
 	 # if (( $i % 3 ==  0 )); then

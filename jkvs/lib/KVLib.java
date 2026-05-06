@@ -190,7 +190,6 @@ public class KVLib {
 			Files.write(src_index_file, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
 
 			for (String key : compacted_logs.keySet()) {
-				std.printf("  [][]key: '%s'\n", key);
 				String cmd = compacted_logs.get(key);
 				String new_log = cmd + "\r\n";
 				long offset = raf.getFilePointer(); // capture BEFORE write
