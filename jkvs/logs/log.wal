@@ -9,3 +9,4 @@ set username "brando" $
 rm username "" $
 set username "wandismio" $
 set username "rando" $
+set channelName "itsThatSimple" $
