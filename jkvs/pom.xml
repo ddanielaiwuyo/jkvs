@@ -23,6 +23,30 @@
 
     <dependencies>
 
+			<!-- Jackson for JSON Parsing -->
+			<dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>2.17.2</version>
+    </dependency>
+
+			<!-- Command line parser -->
+				<dependency>
+					<groupId>info.picocli</groupId>
+					<artifactId>picocli</artifactId>
+					<version>4.7.7</version>
+				</dependency>
+
+			<!-- For compiling with native-image and graal -->
+				<dependency>
+					<groupId>info.picocli</groupId>
+					<artifactId>picocli-codegen</artifactId>
+					<version>4.7.7</version>
+					<scope>provided</scope>
+			</dependency>
+
+
+
         <!-- Log4j -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -56,15 +80,43 @@
     <build>
         <plugins>
 
-            <!-- Java compiler -->
-            <plugin>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+					<!-- Java compiler -->
+<plugin>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <version>3.13.0</version>
 
-                <configuration>
-                    <release>17</release>
-                </configuration>
-            </plugin>
+    <configuration>
+        <release>17</release>
+
+        <!-- Picocli GraalVM support -->
+        <annotationProcessorPaths>
+            <path>
+                <groupId>info.picocli</groupId>
+                <artifactId>picocli-codegen</artifactId>
+                <version>4.7.7</version>
+            </path>
+        </annotationProcessorPaths>
+
+        <compilerArgs>
+
+            <!-- Generates GraalVM config -->
+            <arg>
+                -Aproject=${project.groupId}/${project.artifactId}
+            </arg>
+
+        </compilerArgs>
+
+    </configuration>
+</plugin>
+            <!-- Java compiler -->
+            <!-- <plugin> -->
+            <!--     <artifactId>maven-compiler-plugin</artifactId> -->
+            <!--     <version>3.13.0</version> -->
+            <!---->
+            <!--     <configuration> -->
+            <!--         <release>17</release> -->
+            <!--     </configuration> -->
+            <!-- </plugin> -->
 
             <!-- Fat JAR builder -->
             <plugin>
@@ -73,25 +125,74 @@
                 <version>3.5.0</version>
 
                 <executions>
-                    <execution>
-                        <phase>package</phase>
+									<!-- CLIENT -->
+									  <execution>
+        <id>client</id>
 
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
+        <phase>package</phase>
 
-                        <configuration>
+        <goals>
+            <goal>shade</goal>
+        </goals>
 
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
+        <configuration>
 
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>github.persona_mp3.Main</mainClass>
-                                </transformer>
-                            </transformers>
+            <finalName>jkvs-client</finalName>
 
-                        </configuration>
-                    </execution>
+            <createDependencyReducedPom>false</createDependencyReducedPom>
+
+            <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                    <mainClass>github.persona_mp3.client.Client</mainClass>
+                </transformer>
+            </transformers>
+
+        </configuration>
+    </execution>
+
+    <!-- SERVER -->
+    <execution>
+        <id>server</id>
+
+        <phase>package</phase>
+
+        <goals>
+            <goal>shade</goal>
+        </goals>
+
+        <configuration>
+
+            <finalName>jkvs-server</finalName>
+
+            <createDependencyReducedPom>false</createDependencyReducedPom>
+
+            <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                    <mainClass>github.persona_mp3.server.Server</mainClass>
+                </transformer>
+            </transformers>
+
+        </configuration>
+    </execution>
+                    <!-- <execution> -->
+                    <!--     <phase>package</phase> -->
+                    <!---->
+                    <!--     <goals> -->
+                    <!--         <goal>shade</goal> -->
+                    <!--     </goals> -->
+                    <!---->
+                    <!--     <configuration> -->
+                    <!---->
+                    <!--         <createDependencyReducedPom>false</createDependencyReducedPom> -->
+                    <!---->
+                    <!--         <transformers> -->
+                    <!--             <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"> -->
+                    <!--                 <mainClass>github.persona_mp3.Main</mainClass> -->
+                    <!--             </transformer> -->
+                    <!--         </transformers> -->
+                    <!---->
+                    <!--     </configuration> -->
+                    <!-- </execution> -->
                 </executions>
             </plugin>
 

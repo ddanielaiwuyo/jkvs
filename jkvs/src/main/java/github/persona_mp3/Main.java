@@ -5,8 +5,8 @@ import java.util.Arrays;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
-import github.persona_mp3.lib.*;
 
+import github.persona_mp3.lib.*;
 
 // jkvs::jkvs (refactor) | java -cp target/jkvs-1.0-SNAPSHOT.jar github.persona_mp3.Main
 
