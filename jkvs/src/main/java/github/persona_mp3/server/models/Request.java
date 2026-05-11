@@ -13,4 +13,5 @@ public class Request {
 	public String toString() {
 		return String.format("Request {command: %s, key: %s, value: %s}", this.command, this.key, this.value);
 	}
+
 }

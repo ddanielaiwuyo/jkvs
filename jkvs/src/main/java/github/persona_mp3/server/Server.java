@@ -1,8 +1,8 @@
 package github.persona_mp3.server;
 
-import github.persona_mp3.server.models.Request;
-import github.persona_mp3.server.models.Response;
 import github.persona_mp3.lib.JKVStore;
+import github.persona_mp3.lib.protocol.Protocol;
+import github.persona_mp3.lib.protocol.Request;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -10,17 +10,18 @@ import org.apache.logging.log4j.LogManager;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 
 import picocli.CommandLine;
-
-import com.fasterxml.jackson.core.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class Server {
 	static JKVStore store = new JKVStore();
 	private static Logger logger = LogManager.getLogger(Server.class);
+	private static Protocol protocol = new Protocol();
 
-	public static void main(String[] args) throws JsonProcessingException {
+	private static int MAX_PAYLOAD_MB = 1 * 1024 * 1024;
+
+	public static void main(String[] args) throws IOException {
 		Config config = new Config();
 		CommandLine cmd = new CommandLine(config);
 
@@ -48,57 +49,79 @@ public class Server {
 		}
 	}
 
-	// We're catching errors here so the server doesn't stop because of one
-	// conection's error
+	/**
+	 * [header-length(4bytes)][content]
+	 */
 	static void handleConn(Socket conn) {
+		String addr = conn.getRemoteSocketAddress().toString();
 		try (
-				BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-				PrintWriter pr = new PrintWriter(conn.getOutputStream(), true);) {
-			ObjectMapper mapper = new ObjectMapper();
-			String line;
+				DataInputStream reader = new DataInputStream(conn.getInputStream());
+				PrintWriter writer = new PrintWriter(conn.getOutputStream(), true);) {
 
-			while ((line = reader.readLine()) != null) {
-				Request req = mapper.readValue(line, Request.class);
-				logger.info("processing request= {} from conn: {}", req, conn.getRemoteSocketAddress());
+			while (conn.isConnected() && !conn.isClosed()) {
+				int packetSize = reader.readInt(); // by default reads in bigEndian
+				logger.info("header-size: {}", packetSize);
 
-				Response response = processRequest(req);
-				pr.println(mapper.writeValueAsString(response));
-				logger.info("wrote response={} to client", response);
+				if (packetSize >= MAX_PAYLOAD_MB) {
+					logger.warn("{} sent over max payload. Recvd={}, MaxPayload={}", addr, packetSize, MAX_PAYLOAD_MB);
+					writer.println("payload too large\r\n");
+					return;
+				}
+
+				byte[] buffer = new byte[packetSize];
+				reader.readFully(buffer);
+				String raw = new String(buffer);
+				logger.info("recvd:: raw::{}", raw);
+
+				Request request = protocol.parseRequest(raw);
+
+				if (!request.isValid) {
+					logger.info("request recvd is not valid");
+					writer.println("invalid request\r\n");
+					return;
+				}
+
+				String response = processRequest(request);
+				writer.println(String.format("%s\r\n", response));
+				logger.info("wrote response to client");
+
 			}
+		} catch (EOFException err) {
+			logger.warn("Client has disconnected: {}", err.getMessage());
+			return;
+		} catch (SocketException err) {
+			logger.warn("Client forcefully disconnected: {}", err.getMessage());
+			return;
 
-			logger.info("client {} has disconnected", conn.getRemoteSocketAddress());
-		} catch (IOException err) {
-			logger.error("IOException occured in handleConn. Summary: {}", err.getMessage());
-			System.err.println("\n");
-			err.printStackTrace();
 		} catch (Exception err) {
-			logger.error("Unexpected exception occured in handleConn. Summary: {}", err.getMessage());
-			System.err.println("\n");
+			logger.error("Unexpected error while handling conn addr={}, reason: {}", addr, err.getMessage());
 			err.printStackTrace();
+			return;
 		}
+
 	}
 
-	static Response processRequest(Request req) throws IOException {
-		Response response = new Response();
+	static String processRequest(Request req) throws IOException {
+		String response = "";
 		if (req.command == null) {
-			response.response = "invalid command";
+			response = "invalid command";
 			return response;
 		}
 		switch (req.command) {
 			case JKVStore.GET_COMMAND:
-				response.response = store.get(req.key);
+				response = store.get(req.key);
 				return response;
 
 			case JKVStore.SET_COMMAND:
-				response.response = store.set(req.key, req.value);
+				response = store.set(req.key, req.value);
 				return response;
 
 			case JKVStore.REMOVE_COMMAND:
-				response.response = store.remove(req.key);
+				response = store.remove(req.key);
 				return response;
 		}
 
-		response.response = "unknown command";
+		response = "unknown command";
 		return response;
 	}
 }

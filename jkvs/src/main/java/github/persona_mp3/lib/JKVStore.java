@@ -86,10 +86,12 @@ public class JKVStore {
 	public String get(String key) throws IOException {
 		logger.debug("get-command: {}", key);
 		if (!memoryIndex.containsKey(key)) {
+			logger.debug("memory index does not contain key={}", key);
 			return null;
 		}
 
 		long logPointer = memoryIndex.get(key);
+		logger.debug("log_pointer of key = {}", key);
 
 		RandomAccessFile raf = null;
 
@@ -102,21 +104,23 @@ public class JKVStore {
 			// contains rm
 			if (record.split(" ")[0].equals(REMOVE_COMMAND)) {
 				std.printf("%s not found\n", key);
+				logger.debug("key {} contains tombstone rm", record);
 				return null;
 			}
 
 			String[] parsedLog = record.replaceAll("$\r\n", "").split(" ");
 
 			if (parsedLog.length < 4) {
-				std.eprintf("log record parsed to array has unexpected format: %d\n ", parsedLog.length);
-				std.eprintf("Log: %s\n", record);
+				logger.error("log record parsed to array has unexpected format: {} ", parsedLog.length);
+				logger.error("Log: {}", record);
 				for (String log : parsedLog) {
-					std.eprintf(" %s\n", log);
+					logger.error("{}", log);
 				}
 				throw new RuntimeException("JKVStore.get: Unexpected log format");
 			}
 
 			String value = String.join(" ", Arrays.copyOfRange(parsedLog, 2, parsedLog.length - 1));
+			logger.debug("key: {}, value: {}", key, value);
 			return value.replaceAll("\"", "");
 
 		} finally {
