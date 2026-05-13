@@ -8,7 +8,8 @@ PORT = 9090
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((HOST, PORT))
 
-for i in range(1000000):
+TOTAL_REQUESTS = 100_000
+for i in range(TOTAL_REQUESTS):
     key = f"key_{i}"
     value = f"val_{i}"
     
@@ -27,4 +28,4 @@ for i in range(1000000):
     response = sock.recv(resp_len)
 
 sock.close()
-print("Completed 1000000 requests")
+print(f"Completed {TOTAL_REQUESTS} requests")
