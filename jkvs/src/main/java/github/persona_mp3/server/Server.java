@@ -42,7 +42,6 @@ public class Server {
 		// ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT,
 		// Thread.ofVirtual().factory());
 
-		int totalConns = 0;
 		try (
 				ServerSocket listener = new ServerSocket(port);) {
 
@@ -59,8 +58,6 @@ public class Server {
 				try {
 					// ConnectionHandler handler = new ConnectionHandler(conn, queue);
 					Socket conn = listener.accept();
-					totalConns += 1;
-					System.out.printf("total_connections:: %d \n", totalConns);
 					Handler handler = new Handler(conn, store);
 
 					clientExecutor.submit(handler);
@@ -105,60 +102,60 @@ public class Server {
 	 * [header-length(4bytes)][content]
 	 */
 
-	static void handleConn(Socket conn, BlockingQueue<WriteRequest> queue) {
-
-		System.out.println("GOT EM_GOT_EMM");
-		String addr = conn.getRemoteSocketAddress().toString();
-		try (
-				// Socket socket = conn;
-				OutputStream writer = conn.getOutputStream();
-				DataInputStream reader = new DataInputStream(conn.getInputStream());) {
-
-			String rawRequest = "";
-			String response = "";
-			byte[] rawResponse = null;
-
-			while (conn.isConnected() && !conn.isClosed()) {
-				// rawRequest = protocol.readFromStream(MAX_PAYLOAD_MB, reader);
-				rawRequest = protocol.readPacket(MAX_PAYLOAD_MB, conn);
-				if (rawRequest == null) {
-					logger.debug("nothing more to read from client");
-					return;
-				}
-
-				logger.debug("request_parsed:: {}", rawRequest);
-				Request request = protocol.parseRequest(rawRequest);
-
-				if (!request.isValid) {
-					logger.info("request recvd is not valid");
-					rawResponse = protocol.encodeResponse("what do you mean?");
-					writer.write(rawResponse);
-					continue;
-				}
-
-				response = processRequest(request);
-				rawResponse = protocol.encodeResponse(response);
-
-				writer.write(rawResponse);
-				logger.info("wrote response , {} to client", response);
-
-			}
-			System.out.println("broken outta hot loop");
-
-		} catch (EOFException err) {
-			logger.warn("Client has disconnected: {}", err.getMessage());
-			err.printStackTrace();
-		} catch (SocketException err) {
-			logger.warn("Client forcefully disconnected: {}", err.getMessage());
-			err.printStackTrace();
-
-		} catch (Exception err) {
-			logger.error("Unexpected error while handling conn addr={}, reason: {}", addr, err.getMessage());
-			err.printStackTrace();
-		}
-
-		System.out.println("WHAT?");
-	}
+	// static void handleConn(Socket conn, BlockingQueue<WriteRequest> queue) {
+		//
+		// System.out.println("GOT EM_GOT_EMM");
+		// String addr = conn.getRemoteSocketAddress().toString();
+		// try (
+		// 		// Socket socket = conn;
+		// 		OutputStream writer = conn.getOutputStream();
+		// 		DataInputStream reader = new DataInputStream(conn.getInputStream());) {
+		//
+		// 	String rawRequest = "";
+		// 	String response = "";
+		// 	byte[] rawResponse = null;
+		//
+		// 	while (conn.isConnected() && !conn.isClosed()) {
+		// 		// rawRequest = protocol.readFromStream(MAX_PAYLOAD_MB, reader);
+		// 		rawRequest = protocol.readPacket(MAX_PAYLOAD_MB, conn);
+		// 		if (rawRequest == null) {
+		// 			logger.debug("nothing more to read from client");
+		// 			return;
+		// 		}
+		//
+		// 		logger.debug("request_parsed:: {}", rawRequest);
+		// 		Request request = protocol.parseRequest(rawRequest);
+		//
+		// 		if (!request.isValid) {
+		// 			logger.info("request recvd is not valid");
+		// 			rawResponse = protocol.encodeResponse("what do you mean?");
+		// 			writer.write(rawResponse);
+		// 			continue;
+		// 		}
+		//
+		// 		response = processRequest(request);
+		// 		rawResponse = protocol.encodeResponse(response);
+		//
+		// 		writer.write(rawResponse);
+		// 		logger.info("wrote response , {} to client", response);
+		//
+		// 	}
+		// 	System.out.println("broken outta hot loop");
+		//
+		// } catch (EOFException err) {
+		// 	logger.warn("Client has disconnected: {}", err.getMessage());
+		// 	err.printStackTrace();
+		// } catch (SocketException err) {
+		// 	logger.warn("Client forcefully disconnected: {}", err.getMessage());
+		// 	err.printStackTrace();
+		//
+		// } catch (Exception err) {
+		// 	logger.error("Unexpected error while handling conn addr={}, reason: {}", addr, err.getMessage());
+		// 	err.printStackTrace();
+		// }
+		//
+		// System.out.println("WHAT?");
+	// }
 
 	// static String processRequest(Request req) throws IOException {
 	// String response = "";

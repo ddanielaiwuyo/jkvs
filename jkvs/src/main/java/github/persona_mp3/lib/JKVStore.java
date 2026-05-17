@@ -9,9 +9,7 @@ import java.util.Arrays;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Future;
 
 import java.nio.file.Paths;
 import java.nio.file.*;
@@ -157,6 +155,34 @@ public class JKVStore {
 		return key;
 	}
 
+	// todo(persona_mp3) not sure if we could collapse rawSet and rawRemove into
+	// one operation.
+	/**
+	 * rawSet updates the inMemoryIndex with the key, and logPointer and should only
+	 * be used by async implementations or callers handling IO Operations otherwise
+	 * data is not persisted and is lost
+	 */
+	public void rawSet(String key, long logPointer) {
+		memoryIndex.put(key, logPointer);
+	}
+
+	/**
+	 * rawSet updates the inMemoryIndex with the key, and logPointer
+	 * Operations with this method are marked as deleted and should only be
+	 * used by async implementations or the caller is handling IO Operations
+	 * otherwise
+	 * data is not persisteed and is lost
+	 */
+	public String rawRemove(String key, long logPointer) {
+		if (!memoryIndex.containsKey(key)) {
+			std.printf("%s not found\n", key);
+			return null;
+		}
+
+		memoryIndex.put(key, logPointer);
+		return key;
+	}
+
 	public void async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
 		logger.info("async_init:: starting");
 		this.queue = queue;
@@ -170,7 +196,12 @@ public class JKVStore {
 	// as long as the server
 	//
 	// Problem, theres no way of communicating the result back to the caller thread
+
 	public void async_writer() throws IOException {
+		RandomAccessFile walFile = new RandomAccessFile(LOG_FILE.toString(), "rw");
+		RandomAccessFile indexFile = new RandomAccessFile(INDEX_FILE.toString(), "rw");
+		AsyncLib lib = new AsyncLib(walFile, indexFile);
+
 		logger.info("async writer active");
 		writerThread.submit(() -> {
 			while (!Thread.currentThread().isInterrupted()) {
@@ -178,12 +209,22 @@ public class JKVStore {
 					WriteRequest req = queue.take();
 					if (req.command.equals(SET_COMMAND)) {
 						logger.info("async_writer:: writing set command {}:{}", req.key, req.value);
-						req.result.complete(set(req.key, req.value));
-						// req.result.complete("set_key_resolved");
+						// todo(persona_mp3): we need to make sure the files for index and log files
+						// remain open throughout without opening/closing them for every request
+						// 2. later on, if we still want to squeeze performance we can bactch requests
+						long logPointer = lib.appendToLog(SET_COMMAND, String.format("%s weo", req.key) , req.value);
+						lib.appendToIndex(req.key, logPointer);
+						rawSet(req.key, logPointer);
+
+						// req.result.complete(set(req.key, req.value));
+						req.result.complete(req.value);
 					} else if (req.command.equals(REMOVE_COMMAND)) {
 						logger.info("async_writer:: writing rming command {}:{}", req.key);
-						req.result.complete(remove(req.key));
-						// req.result.complete("remove_key_resolved");
+						long logPointer = lib.appendToLog(REMOVE_COMMAND, req.key, req.value);
+						lib.appendToIndex(req.key, logPointer);
+
+						// req.result.complete(set(req.key, req.value));
+						req.result.complete(rawRemove(req.key, logPointer));
 					}
 				} catch (InterruptedException err) {
 					logger.error("writer interrupted");

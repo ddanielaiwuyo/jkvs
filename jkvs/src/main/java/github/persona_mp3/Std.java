@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.Comparator;
 import java.util.stream.Stream;
+import java.nio.charset.StandardCharsets;
 
 public class Std {
 	public void println(Object s) {
@@ -34,7 +35,7 @@ public class Std {
 	/// wrappred in quotes because if it contains whitespaces it can be read as a
 	/// single value
 	public byte[] encoder(String cmd, String key, String value) {
-		return String.format("%s %s \"%s\" $\r\n", cmd, key, value).getBytes();
+		return String.format("%s %s \"%s\" $\r\n", cmd, key, value).getBytes(StandardCharsets.UTF_8);
 	}
 
 	public void deleteRecursively(Path path) throws IOException {

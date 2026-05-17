@@ -20,8 +20,11 @@ public class Handler implements Runnable {
 
 	static void handle(Socket conn) {
 		try (
-				OutputStream writer = conn.getOutputStream();
-				DataInputStream reader = new DataInputStream(conn.getInputStream());) {
+				// OutputStream writer = conn.getOutputStream();
+				DataInputStream reader = new DataInputStream(conn.getInputStream());
+				OutputStream writer  =new BufferedOutputStream(conn.getOutputStream(), 8000);
+				) {
+			
 			// So the issue here was that earlier on, the author wanted clients to
 			// communicate
 			// via a shell, so the server would still read after a single request
@@ -38,24 +41,26 @@ public class Handler implements Runnable {
 			String response = "";
 			byte[] rawResponse = null;
 
-			// while (conn.isConnected() && !conn.isClosed()) {
-			rawRequest = protocol.readFromStream(MAX_PAYLOAD, reader);
-			if (rawRequest == null) {
-				return;
-			}
+			while (conn.isConnected() && !conn.isClosed()) {
+				rawRequest = protocol.readFromStream(MAX_PAYLOAD, reader);
+				if (rawRequest == null) {
+					return;
+				}
 
-			Request request = protocol.parseRequest(rawRequest);
-			if (!request.isValid) {
-				rawResponse = protocol.encodeResponse("what do you mean?");
+				Request request = protocol.parseRequest(rawRequest);
+				if (!request.isValid) {
+					rawResponse = protocol.encodeResponse("what do you mean?");
+					writer.write(rawResponse);
+					writer.flush();
+					continue;
+				}
+
+				response = processRequest(request);
+				rawResponse = protocol.encodeResponse(response);
 				writer.write(rawResponse);
-				// continue;
+				writer.flush();
+
 			}
-
-			response = processRequest(request);
-			rawResponse = protocol.encodeResponse(response);
-			writer.write(rawResponse);
-
-			// }
 		} catch (Exception err) {
 			try {
 				conn.close();
