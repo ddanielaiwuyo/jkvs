@@ -19,17 +19,41 @@ import java.util.concurrent.LinkedBlockingQueue;
 import picocli.CommandLine;
 
 /**
- * todo( doc:: summary of concurrency-model)
- * ServerMain
+ * TCP server that accepts client connections.
+ *
+ * <p>
+ * By default, the server listens on {@code localhost:9090}. Connections have a
+ * socket timeout of 1 minute; to extend this (for example, when connecting via
+ * a REPL),
+ * start the server with the {@code --repl-mode} flag.
+ *
+ * <h2>Concurrency Model</h2>
+ *
+ * The server uses a two-tier threading model:
+ *
+ * <ul>
+ * <li><b>Level-1 threads</b> — Each incoming connection is handled on its own
+ * virtual thread. No pooling is used, since virtual threads are far cheaper
+ * than platform threads, per-connection work is short-lived, and idle
+ * connections are bounded by the socket timeout. They are also refered to as
+ * readers
+ * <li><b>0-Level thread</b> — A single OS (platform) thread acts as the writer,
+ * serializing all outbound writes.
+ * </ul>
+ *
+ * <p>
+ * For additional server configuration available via the CLI, see
+ * {@link Config}.
  */
-
 public class Server {
 	private static JKVStore store = new JKVStore();
 	private static Logger logger = LogManager.getLogger(Server.class);
 	private static final int MAX_BACKLOG = 1000;
-	// todo(persona) because of repl settings. We should leave it at 15s, but when load testing 
+	// todo(persona) because of repl settings. We should leave it at 15s, but when
+	// load testing
 	// we'd want at most 5s. Include this in cofig-options to something like
-	// jkvs-server --repl-mode will setimeout to 1min by default or what user-preferred
+	// jkvs-server --repl-mode will setimeout to 1min by default or what
+	// user-preferred
 	private static final int CONN_TIMEOUT = 15 * 1000;
 
 	public static void main(String[] args) {
@@ -38,8 +62,7 @@ public class Server {
 		cmd.parseArgs(args);
 		logger.info("initialising database");
 
-		try (
-				ServerSocket listener = new ServerSocket(config.port, MAX_BACKLOG)) {
+		try (ServerSocket listener = new ServerSocket(config.port, MAX_BACKLOG)) {
 
 			// Spawned for each new client. Since these are virtual threads, they are
 			// lightweight
@@ -54,6 +77,7 @@ public class Server {
 			// inMemoryIndex
 			ExecutorService writerThread = Executors.newSingleThreadExecutor();
 
+			// THe WAL for level-1s to access. This is safe since none of the level-1s write to the file
 			RandomAccessFile readOnlyFile = store.async_init(queue, writerThread);
 			logger.info("starting server at tcp::{}:{}", config.addr, config.port);
 
