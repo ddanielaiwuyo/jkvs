@@ -45,7 +45,7 @@ public class Handler implements Runnable {
 
 				Request request = protocol.parseRequest(rawRequest);
 				if (!request.isValid) {
-					logger.info("recieved an invalid request: {}", request);
+					logger.info("received an invalid request {} from {}", request, conn.getRemoteSocketAddress());
 					rawResponse = protocol.encodeResponse("what do you mean?");
 					writer.write(rawResponse);
 					writer.flush();
@@ -59,7 +59,7 @@ public class Handler implements Runnable {
 
 			}
 		} catch (Exception err) {
-			logger.error("an error occured, closing connection. Reason: {}", err.getMessage());
+			logger.error("an error occured closing connection. Reason: {}", err.getMessage());
 			try {
 				logger.info("closing connection");
 				conn.close();
@@ -77,37 +77,38 @@ public class Handler implements Runnable {
 
 	}
 
+	// Returns null if the request isn't supported
 	String processRequest(Request req) throws IOException {
 		String ERR_MSG_RES = "service down, we are sorry";
 
 		if (req.command.equals(JKVStore.SET_COMMAND) || req.command.equals(JKVStore.REMOVE_COMMAND)) {
 			WriteRequest wq = new WriteRequest(req.command, req.key, req.value);
-			logger.info("received a write request {}", req);
+			logger.info("received a write request {} from {}", req, conn.getRemoteSocketAddress());
 			try {
 				store.dropItem(wq);
-				logger.info("waiting for response...");
+				logger.info("waiting for response to send to {}", conn.getRemoteSocketAddress());
 				return wq.result.get();
 			} catch (ExecutionException err) {
-				logger.error("ExecutionException error occured when processingRequsest. Reason: {}", err.getMessage());
+				logger.error("ExecutionException error occured when processingRequest. Reason: {}", err.getMessage());
 				err.printStackTrace();
 				return ERR_MSG_RES;
 			} catch (InterruptedException err) {
-				logger.error("InterruptedException error occured when processingRequsest. Reason: {}", err.getMessage());
+				logger.error("InterruptedException error occured when processingRequest. Reason: {}", err.getMessage());
 				err.printStackTrace();
 				return ERR_MSG_RES;
 
 			} catch (Exception err) {
-				logger.fatal("Unexpected error occured when processingRequsest. Reason: {}", err.getMessage());
+				logger.fatal("Unexpected error occured when processingRequest. Reason: {}", err.getMessage());
 				err.printStackTrace();
 				return ERR_MSG_RES;
 			}
 
 		} else if (req.command.equals(JKVStore.GET_COMMAND)) {
-			logger.info("received read request. {}", req);
+			logger.info("received a read request {} from {} ", conn.getRemoteSocketAddress(), req);
 			return store.rawGet(req.key, walFile);
 		}
 
-		logger.warn("could not process req. Reason: UNKNOWN. {}", req);
+		logger.warn("could not process req. Reason: UNKNOWN. {} from {}", req, conn.getRemoteSocketAddress());
 		return null;
 	}
 

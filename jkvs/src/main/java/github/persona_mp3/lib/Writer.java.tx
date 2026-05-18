@@ -8,25 +8,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
 public class Writer implements Runnable {
-	// Server { HandleConn(&mut ConcurrentLinkedQueue, conn) }
-	// Writer { operates all KVWrites } -> th
-	// Writer { &mut ConcurrentLinkedQueue, &}
-	//
-	// struct Writer {
-	// memoryIndex: ConcurrentHashMap;
-	// buffer: ConcurrentLinkedQueue;
-	// }
-	//
-	// impl Writer {
-	// fn new() -> Writer {}
-	// }
-	//
-	// fn get_value(index: &ConcurrentHashMap){}
-	// fn make_write(buffer &mut ConcurrentLinkedQueue){}
-	// But rust wont allow this to comp, since we'll be using thread, so we'll use
-	// channels instead of ConcurrrentLinkedQueue
-	//
-	// Notes: Look for a way to shutdown thread or signal with the main thread
 	BlockingQueue<JKeyValue> queue; 
 	JKVStore store;
 	private Logger logger = LogManager.getLogger(Writer.class);
