@@ -152,9 +152,10 @@ public class JKVStoreTest {
 
     @Test
     void compactionRemovesDuplicateEntriesAndPreservesLatestValues() throws Exception {
-        // Overwrite the same key 60 times — each record is ~24 bytes, total ~1440 bytes > 1024 threshold
+        // Each record is ~20KB — 60 overwrites = ~1.2MB, exceeding the 1MB threshold
+        String bigValue = "v".repeat(20000);
         for (int i = 0; i < 60; i++) {
-            store.set("counter", "value" + i);
+            store.set("counter", bigValue + i);
         }
         store.set("city", "lagos");
         store.set("name", "alice");
@@ -164,7 +165,7 @@ public class JKVStoreTest {
         rebuilt.init(); // WAL exceeds threshold — compaction fires here
 
         // Latest values survive compaction
-        assertEquals("value59", rebuilt.get("counter"));
+        assertEquals(bigValue + "59", rebuilt.get("counter"));
         assertEquals("lagos", rebuilt.get("city"));
         assertEquals("alice", rebuilt.get("name"));
 
@@ -174,7 +175,7 @@ public class JKVStoreTest {
 
         // New WAL is smaller — 3 unique keys, not 62 records
         long compactedSize = tempDir.resolve("log.wal").toFile().length();
-        assertTrue(compactedSize < 1024, "compacted WAL should be under the threshold, got: " + compactedSize + " bytes");
+        assertTrue(compactedSize < 1024 * 1024, "compacted WAL should be under the threshold, got: " + compactedSize + " bytes");
     }
 
     @Test
@@ -183,9 +184,10 @@ public class JKVStoreTest {
         store.remove("name");
         store.set("survivor", "yes");
 
-        // Bloat the WAL past the threshold using a separate key
+        // Bloat the WAL past the 1MB threshold using a separate key
+        String bigValue = "v".repeat(20000);
         for (int i = 0; i < 60; i++) {
-            store.set("filler", "value" + i);
+            store.set("filler", bigValue + i);
         }
 
         Path archivedLogsDir = tempDir.resolve("archived_logs");
@@ -195,6 +197,6 @@ public class JKVStoreTest {
         // Removed key stays gone after compaction
         assertNull(rebuilt.get("name"));
         assertEquals("yes", rebuilt.get("survivor"));
-        assertEquals("value59", rebuilt.get("filler"));
+        assertEquals(bigValue + "59", rebuilt.get("filler"));
     }
 }

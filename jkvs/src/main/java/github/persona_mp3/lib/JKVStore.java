@@ -67,7 +67,7 @@ public class JKVStore {
 		this(logDir);
 		this.jkvlib.ARCHIVED_LOGS_DIR = archivedLogsDir;
 	}
-	private long MAX_SIZE_MB = 1 * 1024;
+	private long MAX_SIZE_MB = 1 * 1024 * 1024;
 
 	private Logger logger = LogManager.getLogger(JKVStore.class);
 
@@ -236,8 +236,9 @@ public class JKVStore {
 		logger.info("async writer active");
 		writerThread.submit(() -> {
 			while (!Thread.currentThread().isInterrupted()) {
+				WriteRequest req = null;
 				try {
-					WriteRequest req = queue.take();
+					req = queue.take();
 					if (req.command.equals(SET_COMMAND)) {
 						logger.info("async_writer:: writing set command {}:{}", req.key, req.value);
 						// todo(persona_mp3): we need to make sure the files for index and log files
@@ -264,7 +265,9 @@ public class JKVStore {
 				} catch (Exception err) {
 					logger.error("writer error. Reason: {}", err.getMessage());
 					err.printStackTrace();
-					return;
+					if (req != null) {
+						req.result.complete("an error occurred, we are sorry");
+					}
 				}
 			}
 		});
