@@ -17,8 +17,6 @@ public class AsyncLib {
 		this.index = index;
 	}
 
-	// fn append_to_log(raf: &mut RandomAccessFile.Writer, cmd_key_value...String)
-	// -> Result<f32, IOError>
 	/**
 	 * Callers are responsible for updating the memoryIndex
 	 * */
@@ -32,7 +30,6 @@ public class AsyncLib {
 		return logPointer;
 	}
 
-	// fn append_to_index(key: String, value:String) -> Result<(), IOError>
 	/**
 	 * Callers are responsible for updating the memoryIndex
 	 * */
