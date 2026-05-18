@@ -10,6 +10,7 @@ import org.apache.logging.log4j.LogManager;
 
 import java.io.*;
 import java.net.Socket;
+import java.io.EOFException;
 
 import java.util.concurrent.ExecutionException;
 
@@ -39,13 +40,13 @@ public class Handler implements Runnable {
 			while (conn.isConnected() && !conn.isClosed()) {
 				rawRequest = protocol.readFromStream(MAX_PAYLOAD, reader);
 				if (rawRequest == null) {
-					logger.debug("request is null? {}", rawRequest);
+					logger.debug("request after readingFromStream, client has possilbly disonnected");
 					return;
 				}
 
 				Request request = protocol.parseRequest(rawRequest);
 				if (!request.isValid) {
-					logger.debug("request isnt valid -> {}", request);
+					logger.info("received an invalid request {} from {}", request, conn.getRemoteSocketAddress());
 					rawResponse = protocol.encodeResponse("what do you mean?");
 					writer.write(rawResponse);
 					writer.flush();
@@ -59,48 +60,55 @@ public class Handler implements Runnable {
 
 			}
 		} catch (Exception err) {
+			logger.error("an error occured closing. connection. Reason: {}", err.getMessage());
 			try {
+				logger.info("closing connection");
 				conn.close();
-				// logger.error("an error occured, closing conn" );
-			} catch (Exception e) {
-				logger.error("could not close connection::", e.getMessage());
-				e.printStackTrace();
+				err.printStackTrace();
+			} catch (IOException e) {
+				// NOTE:: this could also be a SocketException which happens
+				// because we tried to close the socket during some IO Bound task. Other errors:
+				// SocketConnectionTimeout
+				logger.error("could not close connection. Reason: {}", e.getMessage());
+				logger.error("Parent error");
+				err.printStackTrace();
 			}
 		}
 
 	}
 
+	// Returns null if the request isn't supported
 	String processRequest(Request req) throws IOException {
+		String ERR_MSG_RES = "service down, we are sorry";
+
 		if (req.command.equals(JKVStore.SET_COMMAND) || req.command.equals(JKVStore.REMOVE_COMMAND)) {
 			WriteRequest wq = new WriteRequest(req.command, req.key, req.value);
-			// todo: implement a poision_pill to tell the thread to stop reading
-			// will need to do some sort of Future/await thing here, not sure yet?
-			logger.info("write_request:: {}", req);
+			logger.info("received a write request {} from {}", req, conn.getRemoteSocketAddress());
 			try {
 				store.dropItem(wq);
-				logger.info("waiting for response...");
+				logger.info("waiting for response to send to {}", conn.getRemoteSocketAddress());
 				return wq.result.get();
-				// return "response_response";
 			} catch (ExecutionException err) {
-				logger.error("ExecutionException error occured when processingRequsest\nReason: {}", err.getMessage());
+				logger.error("ExecutionException error occured when processingRequest. Reason: {}", err.getMessage());
 				err.printStackTrace();
-				return "service is down, we are sorry ";
+				return ERR_MSG_RES;
 			} catch (InterruptedException err) {
-				logger.error("InterruptedException rror occured when processingRequsest\nReason: {}", err.getMessage());
+				logger.error("InterruptedException error occured when processingRequest. Reason: {}", err.getMessage());
 				err.printStackTrace();
-				return "service is down, we are sorry ";
+				return ERR_MSG_RES;
 
 			} catch (Exception err) {
-				logger.fatal("Unexpected error occured when processingRequsest\nReason: {}", err.getMessage());
+				logger.fatal("Unexpected error occured when processingRequest. Reason: {}", err.getMessage());
 				err.printStackTrace();
-				return "service is down, we are sorry ";
+				return ERR_MSG_RES;
 			}
+
 		} else if (req.command.equals(JKVStore.GET_COMMAND)) {
-			logger.info("read_request:: {}", req);
+			logger.info("received a read request {} from {} ", conn.getRemoteSocketAddress(), req);
 			return store.rawGet(req.key, walFile);
 		}
 
-		logger.warn("could not process req. Reason: NOT_SUPPORTED. {}", req);
+		logger.warn("could not process req. Reason: UNKNOWN. {} from {}", req, conn.getRemoteSocketAddress());
 		return null;
 	}
 
