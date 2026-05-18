@@ -5,9 +5,7 @@ import github.persona_mp3.lib.types.WriteRequest;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.Map;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.BlockingQueue;
@@ -40,16 +38,32 @@ public class JKVStore {
 	// Sending out copies on each update is also hard too to track
 	// Compared to rust, we could just give an immutableRef out
 	private ConcurrentHashMap<String, Long> memoryIndex = new ConcurrentHashMap<>();
-	public Map<String, Long> readOnlyIndex = Collections.unmodifiableMap(memoryIndex);
 	private BlockingQueue<WriteRequest> queue;
 	private ExecutorService writerThread;
 
 	// public JKVStore(BlockingQueue<WriteRequest>) {
 	// }
 
-	private final Path LOG_DIR = Paths.get("logs");
-	private final Path LOG_FILE = LOG_DIR.resolve("log.wal");
-	private final Path INDEX_FILE = LOG_DIR.resolve("index");
+	private final Path LOG_DIR;
+	private final Path LOG_FILE;
+	private final Path INDEX_FILE;
+
+	public JKVStore() {
+		this(Paths.get("logs"));
+	}
+
+	/** For testing only — injects a custom log directory so tests can use a temp dir. */
+	public JKVStore(Path logDir) {
+		this.LOG_DIR = logDir;
+		this.LOG_FILE = logDir.resolve("log.wal");
+		this.INDEX_FILE = logDir.resolve("index");
+	}
+
+	/** For testing only — also redirects the archived logs directory into the temp dir. */
+	public JKVStore(Path logDir, Path archivedLogsDir) {
+		this(logDir);
+		this.jkvlib.ARCHIVED_LOGS_DIR = archivedLogsDir;
+	}
 	private long MAX_SIZE_MB = 1 * 1024;
 
 	private Logger logger = LogManager.getLogger(JKVStore.class);
