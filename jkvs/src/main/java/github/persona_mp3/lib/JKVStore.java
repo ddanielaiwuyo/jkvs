@@ -5,8 +5,9 @@ import github.persona_mp3.lib.types.WriteRequest;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.Map;
 import java.util.Arrays;
-
+import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.BlockingQueue;
@@ -34,7 +35,12 @@ public class JKVStore {
 	/// Usage: jkvs rm <key>
 	public static final String REMOVE_COMMAND = "rm";
 
+	// todo(persona) not sure if this WILL be a issue, but we can't gaurantee
+	// callers would not modify it.
+	// Sending out copies on each update is also hard too to track
+	// Compared to rust, we could just give an immutableRef out
 	private ConcurrentHashMap<String, Long> memoryIndex = new ConcurrentHashMap<>();
+	public Map<String, Long> readOnlyIndex = Collections.unmodifiableMap(memoryIndex);
 	private BlockingQueue<WriteRequest> queue;
 	private ExecutorService writerThread;
 
@@ -183,12 +189,19 @@ public class JKVStore {
 		return key;
 	}
 
-	public void async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
+	// public String rawGet(String key) {
+	// if (!memoryIndex.containsKey(key)) {
+	// std.printf("%s not found\n", key);
+	// return null;
+	// }
+	// }
+
+	public RandomAccessFile async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
 		logger.info("async_init:: starting");
 		this.queue = queue;
 		this.writerThread = writerThread;
 		init();
-		async_writer();
+		return async_writer();
 	}
 
 	// todo: remove it from the core engine or make it into a seperate module so the
@@ -197,7 +210,7 @@ public class JKVStore {
 	//
 	// Problem, theres no way of communicating the result back to the caller thread
 
-	public void async_writer() throws IOException {
+	public RandomAccessFile async_writer() throws IOException {
 		RandomAccessFile walFile = new RandomAccessFile(LOG_FILE.toString(), "rw");
 		RandomAccessFile indexFile = new RandomAccessFile(INDEX_FILE.toString(), "rw");
 		AsyncLib lib = new AsyncLib(walFile, indexFile);
@@ -212,12 +225,13 @@ public class JKVStore {
 						// todo(persona_mp3): we need to make sure the files for index and log files
 						// remain open throughout without opening/closing them for every request
 						// 2. later on, if we still want to squeeze performance we can bactch requests
-						long logPointer = lib.appendToLog(SET_COMMAND, String.format("%s weo", req.key) , req.value);
+						long logPointer = lib.appendToLog(SET_COMMAND, String.format("%s ", req.key), req.value);
 						lib.appendToIndex(req.key, logPointer);
 						rawSet(req.key, logPointer);
 
 						// req.result.complete(set(req.key, req.value));
 						req.result.complete(req.value);
+						logger.debug("sent response");
 					} else if (req.command.equals(REMOVE_COMMAND)) {
 						logger.info("async_writer:: writing rming command {}:{}", req.key);
 						long logPointer = lib.appendToLog(REMOVE_COMMAND, req.key, req.value);
@@ -236,6 +250,42 @@ public class JKVStore {
 				}
 			}
 		});
+
+		return walFile;
+	}
+
+	public String rawGet(String key, RandomAccessFile walFile) throws IOException {
+		if (!memoryIndex.containsKey(key)) {
+			logger.debug("memory index does not contain key={}", key);
+			return null;
+		}
+
+		long logPointer = memoryIndex.get(key);
+		logger.debug("log_pointer of key = {}, logPointer={}", key, logPointer);
+
+		walFile.seek(logPointer);
+		String record = walFile.readLine();
+		if (record.split(" ")[0].equals(REMOVE_COMMAND)) {
+			std.printf("%s not found\n", key);
+			logger.debug("key {} contains tombstone rm", record);
+			return null;
+		}
+
+		String[] parsedLog = record.replaceAll("$\r\n", "").split(" ");
+
+		if (parsedLog.length < 4) {
+			logger.error("log record parsed to array has unexpected format: {} ", parsedLog.length);
+			logger.error("Log: {}", record);
+			for (String log : parsedLog) {
+				logger.error("{}", log);
+			}
+			throw new RuntimeException("JKVStore.get: Unexpected log format");
+		}
+
+		String value = String.join(" ", Arrays.copyOfRange(parsedLog, 2, parsedLog.length - 1));
+		logger.debug("key: {}, value: {}", key, value);
+		return value.replaceAll("\"", "");
+
 	}
 
 	public void dropItem(WriteRequest req) {

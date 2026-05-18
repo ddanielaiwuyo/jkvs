@@ -14,29 +14,24 @@ import java.net.Socket;
 import java.util.concurrent.ExecutionException;
 
 public class Handler implements Runnable {
-	private static Logger logger = LogManager.getLogger(Server.class);
-	private static Protocol protocol = new Protocol();
-	private static int MAX_PAYLOAD = 1 * 1024 * 1024;
+	private Logger logger = LogManager.getLogger(Server.class);
+	private Protocol protocol = new Protocol();
+	private int MAX_PAYLOAD = 1 * 1024 * 1024;
+	private RandomAccessFile walFile;
+	Socket conn;
+	JKVStore store;
 
-	static void handle(Socket conn) {
+	public Handler(Socket conn, JKVStore store, RandomAccessFile readOnlyFile) {
+		this.conn = conn;
+		this.store = store;
+		this.walFile = readOnlyFile;
+	}
+
+	void handle(Socket conn) {
 		try (
-				// OutputStream writer = conn.getOutputStream();
 				DataInputStream reader = new DataInputStream(conn.getInputStream());
-				OutputStream writer  =new BufferedOutputStream(conn.getOutputStream(), 8000);
-				) {
-			
-			// So the issue here was that earlier on, the author wanted clients to
-			// communicate
-			// via a shell, so the server would still read after a single request
-			// However, with a larger amount of connections, closing the client doesnt mean
-			// the server is done, which is also the puzzlingg thing
-			// But I also think the client is teh problem, because it nolonger writes but
-			// reads,
-			// and the server also reads at the same time, so no-one is writing, but reading
-			// from each other. Network Deadlock
-			// Also taking a look at the gocode, conn.Read(buffer) reads until the buffer is
-			// full, so a simple string will most likely not fill 1024
-			conn.setSoTimeout(1000 * 1);
+				OutputStream writer = new BufferedOutputStream(conn.getOutputStream(), 8000);) {
+
 			String rawRequest = "";
 			String response = "";
 			byte[] rawResponse = null;
@@ -44,11 +39,13 @@ public class Handler implements Runnable {
 			while (conn.isConnected() && !conn.isClosed()) {
 				rawRequest = protocol.readFromStream(MAX_PAYLOAD, reader);
 				if (rawRequest == null) {
+					logger.debug("request is null? {}", rawRequest);
 					return;
 				}
 
 				Request request = protocol.parseRequest(rawRequest);
 				if (!request.isValid) {
+					logger.debug("request isnt valid -> {}", request);
 					rawResponse = protocol.encodeResponse("what do you mean?");
 					writer.write(rawResponse);
 					writer.flush();
@@ -73,11 +70,12 @@ public class Handler implements Runnable {
 
 	}
 
-	static String processRequest(Request req) throws IOException {
+	String processRequest(Request req) throws IOException {
 		if (req.command.equals(JKVStore.SET_COMMAND) || req.command.equals(JKVStore.REMOVE_COMMAND)) {
 			WriteRequest wq = new WriteRequest(req.command, req.key, req.value);
 			// todo: implement a poision_pill to tell the thread to stop reading
 			// will need to do some sort of Future/await thing here, not sure yet?
+			logger.info("write_request:: {}", req);
 			try {
 				store.dropItem(wq);
 				logger.info("waiting for response...");
@@ -98,18 +96,12 @@ public class Handler implements Runnable {
 				return "service is down, we are sorry ";
 			}
 		} else if (req.command.equals(JKVStore.GET_COMMAND)) {
-			return store.get(req.key);
+			logger.info("read_request:: {}", req);
+			return store.rawGet(req.key, walFile);
 		}
 
+		logger.warn("could not process req. Reason: NOT_SUPPORTED. {}", req);
 		return null;
-	}
-
-	Socket conn;
-	static JKVStore store;
-
-	public Handler(Socket conn, JKVStore store) {
-		this.conn = conn;
-		this.store = store;
 	}
 
 	@Override

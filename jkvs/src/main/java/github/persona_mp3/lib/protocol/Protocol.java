@@ -23,7 +23,7 @@ public class Protocol {
 			parsedRequest.key = req[1];
 			parsedRequest.isValid = true;
 			return parsedRequest;
-		} else if (raw.contains(JKVStore.SET_COMMAND) && req.length == 3) {
+		} else if (raw.contains(JKVStore.SET_COMMAND) && req.length >= 3) {
 			parsedRequest.command = JKVStore.SET_COMMAND;
 			parsedRequest.key = req[1];
 			parsedRequest.value = req[2];
