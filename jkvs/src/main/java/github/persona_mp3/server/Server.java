@@ -10,6 +10,7 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.channels.FileChannel;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -78,7 +79,7 @@ public class Server {
 			ExecutorService writerThread = Executors.newSingleThreadExecutor();
 
 			// THe WAL for level-1s to access. This is safe since none of the level-1s write to the file
-			RandomAccessFile readOnlyFile = store.async_init(queue, writerThread);
+			FileChannel readOnlyFile = store.async_init(queue, writerThread);
 			logger.info("starting server at tcp::{}:{}", config.addr, config.port);
 
 			while (true) {

@@ -6,9 +6,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -123,8 +125,8 @@ public class JKVStoreTest {
     void rawGetReturnsCorrectValue() throws Exception {
         store.set("name", "alice");
 
-        try (RandomAccessFile raf = new RandomAccessFile(tempDir.resolve("log.wal").toFile(), "r")) {
-            assertEquals("alice", store.rawGet("name", raf));
+        try (FileChannel ch = FileChannel.open(tempDir.resolve("log.wal"), StandardOpenOption.READ)) {
+            assertEquals("alice", store.rawGet("name", ch, ByteBuffer.allocate(512)));
         }
     }
 
@@ -133,16 +135,16 @@ public class JKVStoreTest {
         store.set("name", "alice");
         store.remove("name");
 
-        try (RandomAccessFile raf = new RandomAccessFile(tempDir.resolve("log.wal").toFile(), "r")) {
-            assertNull(store.rawGet("name", raf));
+        try (FileChannel ch = FileChannel.open(tempDir.resolve("log.wal"), StandardOpenOption.READ)) {
+            assertNull(store.rawGet("name", ch, ByteBuffer.allocate(512)));
         }
     }
 
     @Test
     void rawGetReturnsNullForMissingKey() throws Exception {
         store.set("other", "value"); // ensures WAL exists
-        try (RandomAccessFile raf = new RandomAccessFile(tempDir.resolve("log.wal").toFile(), "r")) {
-            assertNull(store.rawGet("ghost", raf));
+        try (FileChannel ch = FileChannel.open(tempDir.resolve("log.wal"), StandardOpenOption.READ)) {
+            assertNull(store.rawGet("ghost", ch, ByteBuffer.allocate(512)));
         }
     }
 

@@ -11,6 +11,8 @@ import org.apache.logging.log4j.LogManager;
 import java.io.*;
 import java.net.Socket;
 import java.io.EOFException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 
 import java.util.concurrent.ExecutionException;
 
@@ -18,11 +20,12 @@ public class Handler implements Runnable {
 	private Logger logger = LogManager.getLogger(Server.class);
 	private Protocol protocol = new Protocol();
 	private int MAX_PAYLOAD = 1 * 1024 * 1024;
-	private RandomAccessFile walFile;
+	private FileChannel walFile;
+	private ByteBuffer readBuf = ByteBuffer.allocate(MAX_PAYLOAD);
 	Socket conn;
 	JKVStore store;
 
-	public Handler(Socket conn, JKVStore store, RandomAccessFile readOnlyFile) {
+	public Handler(Socket conn, JKVStore store, FileChannel readOnlyFile) {
 		this.conn = conn;
 		this.store = store;
 		this.walFile = readOnlyFile;
@@ -62,9 +65,11 @@ public class Handler implements Runnable {
 		} catch (Exception err) {
 			logger.error("an error occured closing. connection. Reason: {}", err.getMessage());
 			try {
-				logger.info("closing connection");
-				conn.close();
-				err.printStackTrace();
+				if (conn != null) {
+					logger.info("closing connection");
+					conn.close();
+					return;
+				}
 			} catch (IOException e) {
 				// NOTE:: this could also be a SocketException which happens
 				// because we tried to close the socket during some IO Bound task. Other errors:
@@ -105,7 +110,7 @@ public class Handler implements Runnable {
 
 		} else if (req.command.equals(JKVStore.GET_COMMAND)) {
 			logger.info("received a read request {} from {} ", conn.getRemoteSocketAddress(), req);
-			return store.rawGet(req.key, walFile);
+			return store.rawGet(req.key, walFile, readBuf);
 		}
 
 		logger.warn("could not process req. Reason: UNKNOWN. {} from {}", req, conn.getRemoteSocketAddress());

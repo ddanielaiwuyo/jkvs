@@ -4,7 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -40,7 +43,7 @@ public class ConcurrentReadTest {
             }
         }
 
-        RandomAccessFile sharedRaf = new RandomAccessFile(walPath.toFile(), "r");
+        FileChannel sharedChannel = FileChannel.open(walPath, StandardOpenOption.READ);
         AtomicInteger mismatches = new AtomicInteger(0);
 
         CountDownLatch ready = new CountDownLatch(NUM_RECORDS * THREADS_PER_RECORD);
@@ -53,12 +56,14 @@ public class ConcurrentReadTest {
             for (int i = 0; i < NUM_RECORDS; i++) {
                 final int idx = i;
                 executor.submit(() -> {
+                    ByteBuffer buf = ByteBuffer.allocate(512); // local to this thread — not shared
                     ready.countDown();
                     try {
                         start.await();
-                        sharedRaf.seek(offsets[idx]);
-                        String line = sharedRaf.readLine();
-                        if (line == null || !line.split(" ")[1].equals(keys[idx])) {
+                        buf.clear();
+                        sharedChannel.read(buf, offsets[idx]);
+                        String line = new String(buf.array(), 0, buf.position()).split("\n")[0].stripTrailing();
+                        if (line.isEmpty() || !line.split(" ")[1].equals(keys[idx])) {
                             mismatches.incrementAndGet();
                         }
                     } catch (Exception e) {
@@ -73,7 +78,7 @@ public class ConcurrentReadTest {
         ready.await();
         start.countDown();
         done.await(10, TimeUnit.SECONDS);
-        sharedRaf.close();
+        sharedChannel.close();
         executor.shutdown();
 
         assertEquals(0, mismatches.get(),

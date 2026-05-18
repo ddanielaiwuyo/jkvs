@@ -5,6 +5,9 @@ import github.persona_mp3.lib.types.WriteRequest;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -210,7 +213,7 @@ public class JKVStore {
 	// }
 	// }
 
-	public RandomAccessFile async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
+	public FileChannel async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
 		logger.info("async_init:: starting");
 		this.queue = queue;
 		this.writerThread = writerThread;
@@ -224,9 +227,10 @@ public class JKVStore {
 	//
 	// Problem, theres no way of communicating the result back to the caller thread
 
-	public RandomAccessFile async_writer() throws IOException {
+	public FileChannel async_writer() throws IOException {
 		RandomAccessFile walFile = new RandomAccessFile(LOG_FILE.toString(), "rw");
 		RandomAccessFile indexFile = new RandomAccessFile(INDEX_FILE.toString(), "rw");
+		FileChannel readChannel = FileChannel.open(LOG_FILE, StandardOpenOption.READ);
 		AsyncLib lib = new AsyncLib(walFile, indexFile);
 
 		logger.info("async writer active");
@@ -265,10 +269,10 @@ public class JKVStore {
 			}
 		});
 
-		return walFile;
+		return readChannel;
 	}
 
-	public String rawGet(String key, RandomAccessFile walFile) throws IOException {
+	public String rawGet(String key, FileChannel walFile, ByteBuffer buf) throws IOException {
 		if (!memoryIndex.containsKey(key)) {
 			logger.debug("memory index does not contain key={}", key);
 			return null;
@@ -277,8 +281,9 @@ public class JKVStore {
 		long logPointer = memoryIndex.get(key);
 		logger.debug("log_pointer of key = {}, logPointer={}", key, logPointer);
 
-		walFile.seek(logPointer);
-		String record = walFile.readLine();
+		buf.clear();
+		walFile.read(buf, logPointer);
+		String record = new String(buf.array(), 0, buf.position()).split("\n")[0].stripTrailing();
 		if (record.split(" ")[0].equals(REMOVE_COMMAND)) {
 			std.printf("%s not found\n", key);
 			logger.debug("key {} contains tombstone rm", record);
