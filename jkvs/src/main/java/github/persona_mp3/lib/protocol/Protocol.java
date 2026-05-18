@@ -18,12 +18,12 @@ public class Protocol {
 		Request parsedRequest = new Request(null, null, null);
 		String[] req = raw.split(DELIMETER);
 		// we ignore the other commands
-		if (raw.contains(JKVStore.GET_COMMAND) && req.length >=  2) {
+		if (raw.contains(JKVStore.GET_COMMAND) && req.length >= 2) {
 			parsedRequest.command = JKVStore.GET_COMMAND;
 			parsedRequest.key = req[1];
 			parsedRequest.isValid = true;
 			return parsedRequest;
-		} else if (raw.contains(JKVStore.SET_COMMAND) && req.length == 3) {
+		} else if (raw.contains(JKVStore.SET_COMMAND) && req.length >= 3) {
 			parsedRequest.command = JKVStore.SET_COMMAND;
 			parsedRequest.key = req[1];
 			parsedRequest.value = req[2];
@@ -40,7 +40,7 @@ public class Protocol {
 		return parsedRequest;
 	}
 
-	public byte[] encodeRequest(Request req){
+	public byte[] encodeRequest(Request req) {
 		String str = String.format("%s\r\n%s\r\n%s", req.command, req.key, req.value);
 		byte[] raw = str.getBytes();
 		logger.debug("encoded request:  {}", req.toString());
@@ -52,7 +52,7 @@ public class Protocol {
 		return buffer.array();
 	}
 
-	public byte[] encodeResponse(String response){
+	public byte[] encodeResponse(String response) {
 		byte[] raw = String.format("%s\r\n", response).getBytes();
 		ByteBuffer buffer = ByteBuffer.allocate(4 + raw.length);
 		buffer.order(ByteOrder.BIG_ENDIAN);
@@ -67,7 +67,8 @@ public class Protocol {
 		packetSize = reader.readInt();
 		logger.info("packet size: {}", packetSize);
 		if (packetSize >= maxPayload) {
-			logger.warn("{} sent over max payload. Recvd={}, MaxPayload={}", conn.getRemoteSocketAddress(), packetSize, maxPayload);
+			logger.warn("{} sent over max payload. Recvd={}, MaxPayload={}", conn.getRemoteSocketAddress(), packetSize,
+					maxPayload);
 			// writer.println("payload too large\r\n");
 			return null;
 		}
@@ -76,6 +77,30 @@ public class Protocol {
 		reader.readFully(buffer);
 		String raw = new String(buffer);
 		logger.debug("decoded response: {}", raw);
+		return raw;
+	}
+
+	public String readFromStream(int maxPayload, DataInputStream reader) throws Exception {
+		int packetSize = 0;
+		// System.out.println("reading---from---stream");
+		packetSize = reader.readInt();
+		logger.info("packet size: {}", packetSize);
+		if (packetSize >= maxPayload) {
+			logger.warn("recvd max payload. {}, accepted limit={}", packetSize, maxPayload);
+			// System.out.println("max_maxy_parload " + packetSize);
+			// writer.println("payload too large\r\n");
+			return null;
+		}
+		
+		// System.out.print("read from stream");
+		byte[] buffer = new byte[packetSize];
+
+		// System.out.print("waiting for BUFFER");
+		reader.readFully(buffer);
+		// System.out.println("buffer for BUFFER");
+		String raw = new String(buffer);
+		logger.debug("decoded response: {}", raw);
+		// System.out.println("REQUEST|REQUEST :::: " + raw);
 		return raw;
 	}
 }

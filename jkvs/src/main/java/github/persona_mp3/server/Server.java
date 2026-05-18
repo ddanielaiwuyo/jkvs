@@ -1,8 +1,7 @@
 package github.persona_mp3.server;
 
 import github.persona_mp3.lib.JKVStore;
-import github.persona_mp3.lib.protocol.Protocol;
-import github.persona_mp3.lib.protocol.Request;
+import github.persona_mp3.lib.types.WriteRequest;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -10,134 +9,109 @@ import org.apache.logging.log4j.LogManager;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.nio.channels.FileChannel;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import picocli.CommandLine;
 
+/**
+ * TCP server that accepts client connections.
+ *
+ * <p>
+ * By default, the server listens on {@code localhost:9090}. Connections have a
+ * socket timeout of 1 minute; to extend this (for example, when connecting via
+ * a REPL),
+ * start the server with the {@code --repl-mode} flag.
+ *
+ * <h2>Concurrency Model</h2>
+ *
+ * The server uses a two-tier threading model:
+ *
+ * <ul>
+ * <li><b>Level-1 threads</b> — Each incoming connection is handled on its own
+ * virtual thread. No pooling is used, since virtual threads are far cheaper
+ * than platform threads, per-connection work is short-lived, and idle
+ * connections are bounded by the socket timeout. They are also refered to as
+ * readers
+ * <li><b>0-Level thread</b> — A single OS (platform) thread acts as the writer,
+ * serializing all outbound writes.
+ * </ul>
+ *
+ * <p>
+ * For additional server configuration available via the CLI, see
+ * {@link Config}.
+ */
 public class Server {
-	static JKVStore store = new JKVStore();
+	private static JKVStore store = new JKVStore();
 	private static Logger logger = LogManager.getLogger(Server.class);
-	private static Protocol protocol = new Protocol();
+	private static final int MAX_BACKLOG = 1000;
+	// todo(persona) because of repl settings. We should leave it at 15s, but when
+	// load testing
+	// we'd want at most 5s. Include this in cofig-options to something like
+	// jkvs-server --repl-mode will setimeout to 1min by default or what
+	// user-preferred
+	private static final int CONN_TIMEOUT = 15 * 1000;
 
-	private static int MAX_PAYLOAD_MB = 1 * 1024 * 1024;
-
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) {
 		Config config = new Config();
 		CommandLine cmd = new CommandLine(config);
-
 		cmd.parseArgs(args);
+		logger.info("initialising database");
 
-		String addr = config.addr;
-		int port = config.port;
-		logger.info("Initialising database");
+		try (ServerSocket listener = new ServerSocket(config.port, MAX_BACKLOG)) {
 
-		try (
-				ServerSocket listener = new ServerSocket(port);) {
+			// Spawned for each new client. Since these are virtual threads, they are
+			// lightweight
+			// and less taxing than platform OSThreads
+			ExecutorService clientExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-			store.init();
-			logger.info("tcp-server listening tcp://{}:{}", addr, port);
+			// All writeRequests involving <set> and <rm> are dropped here by clients
+			// to be picked up by the writer thread
+			BlockingQueue<WriteRequest> queue = new LinkedBlockingQueue<>();
+
+			// Single writer thread that handles all write bount tasks to the database and
+			// inMemoryIndex
+			ExecutorService writerThread = Executors.newSingleThreadExecutor();
+
+			// THe WAL for level-1s to access. This is safe since none of the level-1s write to the file
+			FileChannel readOnlyFile = store.async_init(queue, writerThread);
+			logger.info("starting server at tcp::{}:{}", config.addr, config.port);
 
 			while (true) {
-				Socket conn = listener.accept();
-				logger.info("accpeted connection from localAddr={}", conn.getRemoteSocketAddress());
+				try {
+					Socket conn = listener.accept();
+					conn.setSoTimeout(CONN_TIMEOUT);
+					logger.info("accepted connection from {}", conn.getRemoteSocketAddress());
+					Handler handler = new Handler(conn, store, readOnlyFile);
 
-				ConnectionHandler handler = new ConnectionHandler(conn);
-				Thread connThread = new Thread(handler);
-				connThread.start();
-				// handleConn(conn);
-			}
-		} catch (Exception err) {
-			logger.error("An error occured: {}", err.getMessage());
-			err.printStackTrace();
-		}
-	}
+					clientExecutor.submit(handler);
 
-	static class ConnectionHandler implements Runnable {
-		Socket conn;
-
-		public ConnectionHandler(Socket conn) {
-			this.conn = conn;
-		}
-
-		@Override
-		public void run() {
-			logger.debug("running connectionHandlerThread. ThreadId={}");
-			handleConn(this.conn);
-			logger.debug("running done");
-		}
-	}
-
-	/**
-	 * [header-length(4bytes)][content]
-	 */
-	static void handleConn(Socket conn) {
-		String addr = conn.getRemoteSocketAddress().toString();
-		try (OutputStream writer = conn.getOutputStream()) {
-
-			String rawRequest = "";
-			String response = "";
-			byte[] rawResponse = null;
-
-			while (conn.isConnected() && !conn.isClosed()) {
-				rawRequest = protocol.readPacket(MAX_PAYLOAD_MB, conn);
-				if (rawRequest == null) {
-					logger.debug("nothing more to read from client");
-					return;
+				} catch (SocketTimeoutException err) {
+					logger.warn("disconnected client. Reason: IDLE");
+					err.printStackTrace();
+				} catch (IOException err) {
+					logger.error("IOException occured in acceptLoop. Reason: {}", err.getMessage());
+					err.printStackTrace();
+				} catch (Exception err) {
+					logger.error("Unxexpected error occured. Reason: {}", err.getMessage());
+					err.printStackTrace();
 				}
-				logger.debug("request_parsed:: {}", rawRequest);
-				Request request = protocol.parseRequest(rawRequest);
-
-				if (!request.isValid) {
-					logger.info("request recvd is not valid");
-					rawResponse = protocol.encodeResponse("what do you mean?");
-					writer.write(rawResponse);
-					continue;
-				}
-
-				response = processRequest(request);
-				rawResponse = protocol.encodeResponse(response);
-
-				writer.write(rawResponse);
-				logger.info("wrote response , {} to client", response);
-
 			}
 
-		} catch (EOFException err) {
-			logger.warn("Client has disconnected: {}", err.getMessage());
-			return;
-		} catch (SocketException err) {
-			logger.warn("Client forcefully disconnected: {}", err.getMessage());
-			return;
-
-		} catch (Exception err) {
-			logger.error("Unexpected error while handling conn addr={}, reason: {}", addr, err.getMessage());
+		} catch (IOException err) {
+			logger.error("IO error occured. Reason: {}", err.getMessage());
 			err.printStackTrace();
-			return;
+		} catch (SecurityException err) {
+			logger.error("SecurityException error occured. Reason: {}", err.getMessage());
+			err.printStackTrace();
+		} catch (IllegalArgumentException err) {
+			logger.error("IllegalArgumentException. Reason: {}", err.getMessage());
+			err.printStackTrace();
 		}
-
-	}
-
-	static String processRequest(Request req) throws IOException {
-		String response = "";
-		if (req.command == null) {
-			response = "invalid command";
-			return response;
-		}
-		switch (req.command) {
-			case JKVStore.GET_COMMAND:
-				response = store.get(req.key);
-				return response;
-
-			case JKVStore.SET_COMMAND:
-				response = store.set(req.key, req.value);
-				return response;
-
-			case JKVStore.REMOVE_COMMAND:
-				response = store.remove(req.key);
-				return response;
-		}
-
-		response = "unknown command";
-		return response;
 	}
 }

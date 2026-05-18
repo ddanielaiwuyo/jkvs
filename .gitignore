@@ -4,3 +4,4 @@ jkvs-server
 
 jkvs/logs/
 jkvs/archived_logs/
+.idea/

@@ -1,0 +1,81 @@
+### 10K concurrent connections with IO 
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+	2026/05/15 22:31:38 max_connections:: 10000
+
+________________________________________________________
+	Executed in    2.61 secs    fish           external
+		 usr time    1.36 secs    0.00 millis    1.36 secs
+		 sys time    1.28 secs    1.25 millis    1.27 secs
+
+### 30K concurrent connections with IO 
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+  2026/05/15 22:33:06 max_connections:: 30000
+
+________________________________________________________
+	Executed in    4.09 secs    fish           external
+		 usr time    3.47 secs    0.00 millis    3.47 secs
+		 sys time   36.21 secs    1.01 millis   36.21 secs
+
+### 50K concurrent connections with IO 
+    jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+    2026/05/15 22:33:47 max_connections:: 50000
+
+________________________________________________________
+	Executed in    5.80 secs    fish           external
+		 usr time    4.86 secs    0.00 micros    4.86 secs
+		 sys time   57.06 secs  952.00 micros   57.06 secs
+
+### 60K concurrent connections with IO 
+________________________________________________________
+Executed in    7.85 secs    fish           external
+   usr time    6.13 secs    0.04 millis    6.13 secs
+   sys time   85.34 secs    1.06 millis   85.34 secs
+
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+2026/05/15 22:34:55 max_connections:: 60000
+
+________________________________________________________
+Executed in   11.24 secs    fish           external
+   usr time    6.98 secs    0.09 millis    6.98 secs
+   sys time  126.24 secs    1.11 millis  126.24 secs
+
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+2026/05/15 22:35:10 max_connections:: 60000
+
+________________________________________________________
+Executed in   14.36 secs    fish           external
+   usr time    6.50 secs  646.00 micros    6.50 secs
+   sys time  165.25 secs  451.00 micros  165.25 secs
+
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+2026/05/15 22:35:56 max_connections:: 60000
+
+________________________________________________________
+Executed in   10.08 secs    fish           external
+   usr time    5.41 secs  739.00 micros    5.41 secs
+   sys time  101.25 secs  519.00 micros  101.25 secs
+
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+2026/05/15 22:36:31 max_connections:: 60000
+
+________________________________________________________
+Executed in    8.78 secs    fish           external
+   usr time    5.65 secs    0.46 millis    5.65 secs
+   sys time   80.18 secs    1.34 millis   80.17 secs
+
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+2026/05/15 22:36:56 max_connections:: 60000
+
+________________________________________________________
+Executed in    8.51 secs    fish           external
+   usr time    5.64 secs    0.00 millis    5.64 secs
+   sys time   85.35 secs    1.69 millis   85.34 secs
+
+### 70K concurrent connections with IO 
+
+2026/05/15 22:37:41 max_connections:: 70000
+
+________________________________________________________
+Executed in   12.67 secs    fish           external
+   usr time    6.98 secs    0.01 millis    6.98 secs
+   sys time  136.01 secs    1.05 millis  136.00 secs

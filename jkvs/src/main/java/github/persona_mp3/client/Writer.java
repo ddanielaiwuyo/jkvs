@@ -69,6 +69,7 @@ public class Writer implements Runnable {
 					req.value = parsedInput[2];
 					return req;
 				}
+				break;
 
 			case 2:
 				if (parsedInput[0].equals(JKVStore.GET_COMMAND)) {

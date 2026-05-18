@@ -3,6 +3,9 @@ package github.persona_mp3.lib;
 import java.io.*;
 import java.nio.file.*;
 import java.util.HashMap;
+
+import java.util.concurrent.ConcurrentHashMap;
+
 import java.util.UUID;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -21,9 +24,10 @@ public class JKVLib {
 
 	private Logger logger = LogManager.getLogger(JKVLib.class);
 
-	public HashMap<String, Long> rebuildIndex(Path indexFile, String delimiter) throws IOException {
+	public ConcurrentHashMap<String, Long> rebuildIndex(Path indexFile, String delimiter) throws IOException {
 		logger.info("Rebuilding index");
-		HashMap<String, Long> memoryIndex = new HashMap<>();
+		// HashMap<String, Long> memoryIndex = new HashMap<>();
+		ConcurrentHashMap<String, Long> memoryIndex = new ConcurrentHashMap<>();
 
 		BufferedReader br = null;
 		try {
@@ -94,7 +98,7 @@ public class JKVLib {
 	public void compactLogs(Path src, Path index) throws IOException {
 		logger.info("compacting logs from src: {} and {}", src, index);
 
-		HashMap<String, String> compactedLogs = parseLog(src);
+		ConcurrentHashMap<String, String> compactedLogs = parseLog(src);
 		if (compactedLogs == null) {
 			return;
 		}
@@ -148,9 +152,10 @@ public class JKVLib {
 		}
 	}
 
-	private HashMap<String, String> parseLog(Path src) throws IOException {
+	private ConcurrentHashMap<String, String> parseLog(Path src) throws IOException {
 		final int MIN_LENGTH_OF_PARSED_LOG = 4;
-		HashMap<String, String> compactedLogs = new HashMap<>();
+		ConcurrentHashMap<String, String> compactedLogs = new ConcurrentHashMap<String, String>();
+
 		int diff = 0;
 		try (
 				ReversedReader reader = new ReversedReader(src.toString());) {

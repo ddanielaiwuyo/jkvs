@@ -1,0 +1,96 @@
+total 100M
+-rw-r--r--. 1 user user 39M May 15 20:19 index
+-rw-r--r--. 1 user user 61M May 15 20:19 log.wal
+
+total 48M
+-rw-r--r--. 1 user user 19M May 15 20:26 index
+-rw-r--r--. 1 user user 30M May 15 20:26 log.wal
+
+
+
+jkvs::jkvs (concurrency-refactor) | time ./tester.py
+Completed 1000000 requests
+
+________________________________________________________
+Executed in  190.64 secs    fish           external
+   usr time    5.47 secs  745.00 micros    5.47 secs
+   sys time   16.46 secs  200.00 micros   16.46 secs
+
+⏎                                                                                                                                                                                                                                       
+
+  jkvs::jkvs (concurrency-refactor) | time ./tester.py
+Completed 100000 requests
+
+________________________________________________________
+Executed in    5.14 secs      fish           external
+   usr time  187.90 millis    0.00 micros  187.90 millis
+   sys time  555.08 millis  877.00 micros  554.21 millis
+
+  jkvs::jkvs (concurrency-refactor) | time ./tester.py
+
+________________________________________________________
+Executed in    7.65 secs      fish           external
+   usr time  307.61 millis    0.00 micros  307.61 millis
+   sys time  960.95 millis  887.00 micros  960.06 millis
+
+  jkvs::jkvs (concurrency-refactor) | time ./tester.py
+Completed 100000 requests
+
+________________________________________________________
+Executed in    6.22 secs      fish           external
+   usr time  238.69 millis  575.00 micros  238.11 millis
+   sys time  806.08 millis  428.00 micros  805.65 millis
+
+  jkvs::jkvs (concurrency-refactor) | 
+
+
+	All connections are spawned go-routines that read and write to the server, they're never closed until a read is done
+  jkvs::jkvs (concurrency-refactor) | time go run bomb.go
+2026/05/15 20:34:10 max_connections:: 100000
+2026/05/15 20:34:29 could not connect for conn-> 53517 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:29 could not connect for conn-> 53514 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:29 could not connect for conn-> 53765 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:30 could not connect for conn-> 53777 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:30 could not connect for conn-> 54413 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:31 could not connect for conn-> 53352 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:31 could not connect for conn-> 54441 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:31 could not connect for conn-> 54520 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:31 could not connect for conn-> 54758 dial tcp [::1]:9090: connect: cannot assign requested address
+2026/05/15 20:34:31 could not connect for conn-> 53557 dial tcp [::1]:9090: connect: cannot assign requested address
+done with bombing server
+
+________________________________________________________
+Executed in   22.08 secs    fish           external
+   usr time    7.60 secs    0.00 millis    7.60 secs
+   sys time  273.60 secs    1.31 millis  273.60 secs
+
+  jkvs::jkvs (concurrency-refactor) | 
+
+
+1, 630, 008 logs/index
+
+
+32768	60999
+
+
+
+---- WITHOUT IO ------
+
+
+jkvs::jkvs (concurrency-refactor) | time ./tester.py
+Completed 100000 requests
+
+________________________________________________________
+Executed in    4.72 secs    fish           external
+   usr time    0.34 secs    0.00 micros    0.34 secs
+   sys time    1.01 secs  932.00 micros    1.01 secs
+
+  jkvs::jkvs (concurrency-refactor) | time ./tester.py
+Completed 100000 requests
+
+________________________________________________________
+Executed in    4.57 secs    fish           external
+   usr time    0.32 secs  551.00 micros    0.32 secs
+   sys time    1.13 secs  422.00 micros    1.13 secs
+
+  jkvs::jkvs (concurrency-refactor) |

@@ -1,15 +1,23 @@
 package github.persona_mp3.lib;
 
+import github.persona_mp3.Std;
+import github.persona_mp3.lib.types.WriteRequest;
+
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.HashMap;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.BlockingQueue;
+
 import java.nio.file.Paths;
 import java.nio.file.*;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
-import github.persona_mp3.Std;
 
 public class JKVStore {
 	Std std = new Std();
@@ -28,12 +36,38 @@ public class JKVStore {
 	/// Usage: jkvs rm <key>
 	public static final String REMOVE_COMMAND = "rm";
 
-	private HashMap<String, Long> memoryIndex = new HashMap<>();
+	// todo(persona) not sure if this WILL be a issue, but we can't gaurantee
+	// callers would not modify it.
+	// Sending out copies on each update is also hard too to track
+	// Compared to rust, we could just give an immutableRef out
+	private ConcurrentHashMap<String, Long> memoryIndex = new ConcurrentHashMap<>();
+	private BlockingQueue<WriteRequest> queue;
+	private ExecutorService writerThread;
 
-	private final Path LOG_DIR = Paths.get("logs");
-	private final Path LOG_FILE = LOG_DIR.resolve("log.wal");
-	private final Path INDEX_FILE = LOG_DIR.resolve("index");
-	private long MAX_SIZE_MB = 1 * 1024;
+	// public JKVStore(BlockingQueue<WriteRequest>) {
+	// }
+
+	private final Path LOG_DIR;
+	private final Path LOG_FILE;
+	private final Path INDEX_FILE;
+
+	public JKVStore() {
+		this(Paths.get("logs"));
+	}
+
+	/** For testing only — injects a custom log directory so tests can use a temp dir. */
+	public JKVStore(Path logDir) {
+		this.LOG_DIR = logDir;
+		this.LOG_FILE = logDir.resolve("log.wal");
+		this.INDEX_FILE = logDir.resolve("index");
+	}
+
+	/** For testing only — also redirects the archived logs directory into the temp dir. */
+	public JKVStore(Path logDir, Path archivedLogsDir) {
+		this(logDir);
+		this.jkvlib.ARCHIVED_LOGS_DIR = archivedLogsDir;
+	}
+	private long MAX_SIZE_MB = 1 * 1024 * 1024;
 
 	private Logger logger = LogManager.getLogger(JKVStore.class);
 
@@ -142,6 +176,146 @@ public class JKVStore {
 
 		memoryIndex.put(key, logPointer);
 		return key;
+	}
+
+	// todo(persona_mp3) not sure if we could collapse rawSet and rawRemove into
+	// one operation.
+	/**
+	 * rawSet updates the inMemoryIndex with the key, and logPointer and should only
+	 * be used by async implementations or callers handling IO Operations otherwise
+	 * data is not persisted and is lost
+	 */
+	public void rawSet(String key, long logPointer) {
+		memoryIndex.put(key, logPointer);
+	}
+
+	/**
+	 * rawSet updates the inMemoryIndex with the key, and logPointer
+	 * Operations with this method are marked as deleted and should only be
+	 * used by async implementations or the caller is handling IO Operations
+	 * otherwise
+	 * data is not persisteed and is lost
+	 */
+	public String rawRemove(String key, long logPointer) {
+		if (!memoryIndex.containsKey(key)) {
+			std.printf("%s not found\n", key);
+			return null;
+		}
+
+		memoryIndex.put(key, logPointer);
+		return key;
+	}
+
+	// public String rawGet(String key) {
+	// if (!memoryIndex.containsKey(key)) {
+	// std.printf("%s not found\n", key);
+	// return null;
+	// }
+	// }
+
+	public FileChannel async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
+		logger.info("async_init:: starting");
+		this.queue = queue;
+		this.writerThread = writerThread;
+		init();
+		return async_writer();
+	}
+
+	// todo: remove it from the core engine or make it into a seperate module so the
+	// thread lives, THis is just to see if we can impl the single-writer
+	// as long as the server
+	//
+	// Problem, theres no way of communicating the result back to the caller thread
+
+	public FileChannel async_writer() throws IOException {
+		RandomAccessFile walFile = new RandomAccessFile(LOG_FILE.toString(), "rw");
+		RandomAccessFile indexFile = new RandomAccessFile(INDEX_FILE.toString(), "rw");
+		FileChannel readChannel = FileChannel.open(LOG_FILE, StandardOpenOption.READ);
+		AsyncLib lib = new AsyncLib(walFile, indexFile);
+
+		logger.info("async writer active");
+		writerThread.submit(() -> {
+			while (!Thread.currentThread().isInterrupted()) {
+				WriteRequest req = null;
+				try {
+					req = queue.take();
+					if (req.command.equals(SET_COMMAND)) {
+						logger.info("async_writer:: writing set command {}:{}", req.key, req.value);
+						// todo(persona_mp3): we need to make sure the files for index and log files
+						// remain open throughout without opening/closing them for every request
+						// 2. later on, if we still want to squeeze performance we can bactch requests
+						long logPointer = lib.appendToLog(SET_COMMAND, String.format("%s ", req.key), req.value);
+						lib.appendToIndex(req.key, logPointer);
+						rawSet(req.key, logPointer);
+
+						// req.result.complete(set(req.key, req.value));
+						req.result.complete(req.value);
+						logger.debug("sent response");
+					} else if (req.command.equals(REMOVE_COMMAND)) {
+						logger.info("async_writer:: writing rming command {}:{}", req.key);
+						long logPointer = lib.appendToLog(REMOVE_COMMAND, req.key, req.value);
+						lib.appendToIndex(req.key, logPointer);
+
+						// req.result.complete(set(req.key, req.value));
+						req.result.complete(rawRemove(req.key, logPointer));
+					}
+				} catch (InterruptedException err) {
+					logger.error("writer interrupted");
+					return;
+				} catch (Exception err) {
+					logger.error("writer error. Reason: {}", err.getMessage());
+					err.printStackTrace();
+					if (req != null) {
+						req.result.complete("an error occurred, we are sorry");
+					}
+				}
+			}
+		});
+
+		return readChannel;
+	}
+
+	public String rawGet(String key, FileChannel walFile, ByteBuffer buf) throws IOException {
+		if (!memoryIndex.containsKey(key)) {
+			logger.debug("memory index does not contain key={}", key);
+			return null;
+		}
+
+		long logPointer = memoryIndex.get(key);
+		logger.debug("log_pointer of key = {}, logPointer={}", key, logPointer);
+
+		buf.clear();
+		walFile.read(buf, logPointer);
+		String record = new String(buf.array(), 0, buf.position()).split("\n")[0].stripTrailing();
+		if (record.split(" ")[0].equals(REMOVE_COMMAND)) {
+			std.printf("%s not found\n", key);
+			logger.debug("key {} contains tombstone rm", record);
+			return null;
+		}
+
+		String[] parsedLog = record.replaceAll("$\r\n", "").split(" ");
+
+		if (parsedLog.length < 4) {
+			logger.error("log record parsed to array has unexpected format: {} ", parsedLog.length);
+			logger.error("Log: {}", record);
+			for (String log : parsedLog) {
+				logger.error("{}", log);
+			}
+			throw new RuntimeException("JKVStore.get: Unexpected log format");
+		}
+
+		String value = String.join(" ", Arrays.copyOfRange(parsedLog, 2, parsedLog.length - 1));
+		logger.debug("key: {}, value: {}", key, value);
+		return value.replaceAll("\"", "");
+
+	}
+
+	public void dropItem(WriteRequest req) {
+		// todo: use timeouts
+		// And we cant call async_writer() here again, because why? we'd have two thread
+		// instances runnning
+		// async_writer is called during startup
+		queue.offer(req);
 	}
 
 }

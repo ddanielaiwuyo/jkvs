@@ -14,7 +14,7 @@
     <name>jkvs</name>
 
     <properties>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <log4j.version>2.26.0</log4j.version>
@@ -86,7 +86,7 @@
     <version>3.13.0</version>
 
     <configuration>
-        <release>17</release>
+        <release>21</release>
 
         <!-- Picocli GraalVM support -->
         <annotationProcessorPaths>
@@ -108,15 +108,6 @@
 
     </configuration>
 </plugin>
-            <!-- Java compiler -->
-            <!-- <plugin> -->
-            <!--     <artifactId>maven-compiler-plugin</artifactId> -->
-            <!--     <version>3.13.0</version> -->
-            <!---->
-            <!--     <configuration> -->
-            <!--         <release>17</release> -->
-            <!--     </configuration> -->
-            <!-- </plugin> -->
 
             <!-- Fat JAR builder -->
             <plugin>

@@ -8,7 +8,7 @@ PORT = 9090
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((HOST, PORT))
 
-TOTAL_REQUESTS = 1_000_000
+TOTAL_REQUESTS = 1_00_000
 for i in range(TOTAL_REQUESTS):
     key = f"key_{i}"
     value = f"val_{i}"
