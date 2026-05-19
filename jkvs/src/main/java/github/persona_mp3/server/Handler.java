@@ -63,7 +63,6 @@ public class Handler implements Runnable {
 
 			}
 		} catch (Exception err) {
-			logger.error("an error occured closing. connection. Reason: {}", err.getMessage());
 			try {
 				if (conn != null) {
 					logger.info("closing connection");
