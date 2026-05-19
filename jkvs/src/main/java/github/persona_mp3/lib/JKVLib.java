@@ -2,7 +2,9 @@ package github.persona_mp3.lib;
 
 import java.io.*;
 import java.nio.file.*;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,6 +25,23 @@ public class JKVLib {
 	Std std = new Std();
 
 	private Logger logger = LogManager.getLogger(JKVLib.class);
+
+	public ConcurrentHashMap<String, String> rebuildValues(Path logFile, Path indexFile) throws IOException {
+		ConcurrentHashMap<String, Long> offsets = rebuildIndex(indexFile, " ");
+		ConcurrentHashMap<String, String> values = new ConcurrentHashMap<>();
+		try (RandomAccessFile raf = new RandomAccessFile(logFile.toString(), "r")) {
+			for (Map.Entry<String, Long> entry : offsets.entrySet()) {
+				raf.seek(entry.getValue());
+				String record = raf.readLine();
+				if (record == null) continue;
+				String[] parts = record.split(" ");
+				if (parts[0].equals("rm") || parts.length < 4) continue;
+				String value = String.join(" ", Arrays.copyOfRange(parts, 2, parts.length - 1));
+				values.put(entry.getKey(), value.replaceAll("\"", ""));
+			}
+		}
+		return values;
+	}
 
 	public ConcurrentHashMap<String, Long> rebuildIndex(Path indexFile, String delimiter) throws IOException {
 		logger.info("Rebuilding index");

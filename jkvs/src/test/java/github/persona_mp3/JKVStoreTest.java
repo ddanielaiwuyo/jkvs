@@ -6,11 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -125,27 +122,20 @@ public class JKVStoreTest {
     void rawGetReturnsCorrectValue() throws Exception {
         store.set("name", "alice");
 
-        try (FileChannel ch = FileChannel.open(tempDir.resolve("log.wal"), StandardOpenOption.READ)) {
-            assertEquals("alice", store.rawGet("name", ch, ByteBuffer.allocate(512)));
-        }
+        assertEquals("alice", store.rawGet("name"));
     }
 
     @Test
     void rawGetReturnsNullForRemovedKey() throws Exception {
         store.set("name", "alice");
         store.remove("name");
-
-        try (FileChannel ch = FileChannel.open(tempDir.resolve("log.wal"), StandardOpenOption.READ)) {
-            assertNull(store.rawGet("name", ch, ByteBuffer.allocate(512)));
-        }
+        assertNull(store.rawGet("name"));
     }
 
     @Test
     void rawGetReturnsNullForMissingKey() throws Exception {
-        store.set("other", "value"); // ensures WAL exists
-        try (FileChannel ch = FileChannel.open(tempDir.resolve("log.wal"), StandardOpenOption.READ)) {
-            assertNull(store.rawGet("ghost", ch, ByteBuffer.allocate(512)));
-        }
+        store.set("other", "value");
+        assertNull(store.rawGet("ghost"));
     }
 
     // ---- log compaction (triggered at startup when WAL >= 1024 bytes) ----

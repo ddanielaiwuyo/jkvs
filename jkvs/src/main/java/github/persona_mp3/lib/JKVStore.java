@@ -5,10 +5,6 @@ import github.persona_mp3.lib.types.WriteRequest;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.BlockingQueue;
@@ -40,7 +36,7 @@ public class JKVStore {
 	// callers would not modify it.
 	// Sending out copies on each update is also hard too to track
 	// Compared to rust, we could just give an immutableRef out
-	private ConcurrentHashMap<String, Long> memoryIndex = new ConcurrentHashMap<>();
+	private ConcurrentHashMap<String, String> memoryIndex = new ConcurrentHashMap<>();
 	private BlockingQueue<WriteRequest> queue;
 	private ExecutorService writerThread;
 
@@ -105,7 +101,7 @@ public class JKVStore {
 			jkvlib.compactLogs(LOG_FILE, INDEX_FILE);
 		}
 
-		memoryIndex = jkvlib.rebuildIndex(INDEX_FILE, " ");
+		memoryIndex = jkvlib.rebuildValues(LOG_FILE, INDEX_FILE);
 		logger.info("Logs rebuilt successfully. IndexSize={}", memoryIndex.size());
 	}
 
@@ -113,56 +109,13 @@ public class JKVStore {
 		logger.debug("set-command: {}::{}", key, value);
 		long logPointer = jkvlib.appendToLogFile(LOG_FILE, SET_COMMAND, key, value);
 		jkvlib.appendToIndexFile(INDEX_FILE, key, logPointer);
-		memoryIndex.put(key, logPointer);
+		memoryIndex.put(key, value);
 		return value;
 	}
 
-	public String get(String key) throws IOException {
-		logger.debug("get-command: {}, inMemSize: {}", key, memoryIndex.size());
-		if (!memoryIndex.containsKey(key)) {
-			logger.debug("memory index does not contain key={}", key);
-			return null;
-		}
-
-		long logPointer = memoryIndex.get(key);
-		logger.debug("log_pointer of key = {}, logPointer={}", key, logPointer);
-
-		RandomAccessFile raf = null;
-
-		try {
-			raf = new RandomAccessFile(LOG_FILE.toString(), "r");
-			raf.seek(logPointer);
-			String record = raf.readLine();
-			// could have been a nasty but with record.contains(RM_COMMAND)
-			// if you did set env terminal, this record would be deleted, because terminal
-			// contains rm
-			if (record.split(" ")[0].equals(REMOVE_COMMAND)) {
-				std.printf("%s not found\n", key);
-				logger.debug("key {} contains tombstone rm", record);
-				return null;
-			}
-
-			String[] parsedLog = record.replaceAll("$\r\n", "").split(" ");
-
-			if (parsedLog.length < 4) {
-				logger.error("log record parsed to array has unexpected format: {} ", parsedLog.length);
-				logger.error("Log: {}", record);
-				for (String log : parsedLog) {
-					logger.error("{}", log);
-				}
-				throw new RuntimeException("JKVStore.get: Unexpected log format");
-			}
-
-			String value = String.join(" ", Arrays.copyOfRange(parsedLog, 2, parsedLog.length - 1));
-			logger.debug("key: {}, value: {}", key, value);
-			return value.replaceAll("\"", "");
-
-		} finally {
-			if (raf != null) {
-				raf.close();
-			}
-		}
-
+	public String get(String key) {
+		logger.debug("get-command: {}", key);
+		return memoryIndex.get(key);
 	}
 
 	public String remove(String key) throws IOException {
@@ -174,7 +127,7 @@ public class JKVStore {
 		long logPointer = jkvlib.appendToLogFile(LOG_FILE, REMOVE_COMMAND, key, "");
 		jkvlib.appendToIndexFile(INDEX_FILE, key, logPointer);
 
-		memoryIndex.put(key, logPointer);
+		memoryIndex.remove(key);
 		return key;
 	}
 
@@ -185,8 +138,8 @@ public class JKVStore {
 	 * be used by async implementations or callers handling IO Operations otherwise
 	 * data is not persisted and is lost
 	 */
-	public void rawSet(String key, long logPointer) {
-		memoryIndex.put(key, logPointer);
+	public void rawSet(String key, String value) {
+		memoryIndex.put(key, value);
 	}
 
 	/**
@@ -196,13 +149,13 @@ public class JKVStore {
 	 * otherwise
 	 * data is not persisteed and is lost
 	 */
-	public String rawRemove(String key, long logPointer) {
+	public String rawRemove(String key) {
 		if (!memoryIndex.containsKey(key)) {
 			std.printf("%s not found\n", key);
 			return null;
 		}
 
-		memoryIndex.put(key, logPointer);
+		memoryIndex.remove(key);
 		return key;
 	}
 
@@ -213,12 +166,12 @@ public class JKVStore {
 	// }
 	// }
 
-	public FileChannel async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
+	public void async_init(BlockingQueue<WriteRequest> queue, ExecutorService writerThread) throws IOException {
 		logger.info("async_init:: starting");
 		this.queue = queue;
 		this.writerThread = writerThread;
 		init();
-		return async_writer();
+		async_writer();
 	}
 
 	// todo: remove it from the core engine or make it into a seperate module so the
@@ -227,10 +180,9 @@ public class JKVStore {
 	//
 	// Problem, theres no way of communicating the result back to the caller thread
 
-	public FileChannel async_writer() throws IOException {
+	public void async_writer() throws IOException {
 		RandomAccessFile walFile = new RandomAccessFile(LOG_FILE.toString(), "rw");
 		RandomAccessFile indexFile = new RandomAccessFile(INDEX_FILE.toString(), "rw");
-		FileChannel readChannel = FileChannel.open(LOG_FILE, StandardOpenOption.READ);
 		AsyncLib lib = new AsyncLib(walFile, indexFile);
 
 		logger.info("async writer active");
@@ -246,7 +198,7 @@ public class JKVStore {
 						// 2. later on, if we still want to squeeze performance we can bactch requests
 						long logPointer = lib.appendToLog(SET_COMMAND, String.format("%s ", req.key), req.value);
 						lib.appendToIndex(req.key, logPointer);
-						rawSet(req.key, logPointer);
+						rawSet(req.key, req.value);
 
 						// req.result.complete(set(req.key, req.value));
 						req.result.complete(req.value);
@@ -256,8 +208,7 @@ public class JKVStore {
 						long logPointer = lib.appendToLog(REMOVE_COMMAND, req.key, req.value);
 						lib.appendToIndex(req.key, logPointer);
 
-						// req.result.complete(set(req.key, req.value));
-						req.result.complete(rawRemove(req.key, logPointer));
+						req.result.complete(rawRemove(req.key));
 					}
 				} catch (InterruptedException err) {
 					logger.error("writer interrupted");
@@ -272,42 +223,10 @@ public class JKVStore {
 			}
 		});
 
-		return readChannel;
 	}
 
-	public String rawGet(String key, FileChannel walFile, ByteBuffer buf) throws IOException {
-		if (!memoryIndex.containsKey(key)) {
-			logger.debug("memory index does not contain key={}", key);
-			return null;
-		}
-
-		long logPointer = memoryIndex.get(key);
-		logger.debug("log_pointer of key = {}, logPointer={}", key, logPointer);
-
-		buf.clear();
-		walFile.read(buf, logPointer);
-		String record = new String(buf.array(), 0, buf.position()).split("\n")[0].stripTrailing();
-		if (record.split(" ")[0].equals(REMOVE_COMMAND)) {
-			std.printf("%s not found\n", key);
-			logger.debug("key {} contains tombstone rm", record);
-			return null;
-		}
-
-		String[] parsedLog = record.replaceAll("$\r\n", "").split(" ");
-
-		if (parsedLog.length < 4) {
-			logger.error("log record parsed to array has unexpected format: {} ", parsedLog.length);
-			logger.error("Log: {}", record);
-			for (String log : parsedLog) {
-				logger.error("{}", log);
-			}
-			throw new RuntimeException("JKVStore.get: Unexpected log format");
-		}
-
-		String value = String.join(" ", Arrays.copyOfRange(parsedLog, 2, parsedLog.length - 1));
-		logger.debug("key: {}, value: {}", key, value);
-		return value.replaceAll("\"", "");
-
+	public String rawGet(String key) {
+		return memoryIndex.get(key);
 	}
 
 	public void dropItem(WriteRequest req) {
