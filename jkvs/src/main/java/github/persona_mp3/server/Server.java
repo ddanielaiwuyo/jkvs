@@ -49,12 +49,7 @@ public class Server {
 	private static JKVStore store = new JKVStore();
 	private static Logger logger = LogManager.getLogger(Server.class);
 	private static final int MAX_BACKLOG = 1000;
-	// todo(persona) because of repl settings. We should leave it at 15s, but when
-	// load testing
-	// we'd want at most 5s. Include this in cofig-options to something like
-	// jkvs-server --repl-mode will setimeout to 1min by default or what
-	// user-preferred
-	private static final int CONN_TIMEOUT = 15 * 1000;
+	private static final int CONN_TIMEOUT = 5 * 60_000;
 
 	public static void main(String[] args) {
 		Config config = new Config();
@@ -73,7 +68,7 @@ public class Server {
 			// to be picked up by the writer thread
 			BlockingQueue<WriteRequest> queue = new LinkedBlockingQueue<>();
 
-			// Single writer thread that handles all write bount tasks to the database and
+			// Single writer thread that handles all write bound tasks to the database and
 			// inMemoryIndex
 			ExecutorService writerThread = Executors.newSingleThreadExecutor();
 
