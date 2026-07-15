@@ -52,8 +52,17 @@ public class Protocol {
 		return buffer.array();
 	}
 
+	// public byte[] encodeResponse(String response) {
+	// 	byte[] raw = String.format("%s\r\n", response).getBytes();
+	// 	ByteBuffer buffer = ByteBuffer.allocate(4 + raw.length);
+	// 	buffer.order(ByteOrder.BIG_ENDIAN);
+	// 	buffer.putInt(raw.length);
+	// 	buffer.put(raw);
+	// 	return buffer.array();
+	// }
+
 	public byte[] encodeResponse(String response) {
-		byte[] raw = String.format("%s\r\n", response).getBytes();
+		byte[] raw = (response + "\r\n").getBytes(StandardCharsets.UTF_8);
 		ByteBuffer buffer = ByteBuffer.allocate(4 + raw.length);
 		buffer.order(ByteOrder.BIG_ENDIAN);
 		buffer.putInt(raw.length);
